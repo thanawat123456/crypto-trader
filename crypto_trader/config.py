@@ -19,7 +19,10 @@ DEFAULTS = {
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
     "bot": {"poll_seconds": 60, "trade_amount": 0.001},
-    "alerts": {"telegram": {"enabled": False, "bot_token": "", "chat_id": ""}},
+    "alerts": {
+        "discord": {"enabled": False, "webhook_url": ""},
+        "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
+    },
 }
 
 
@@ -59,6 +62,10 @@ def _apply_env(cfg: dict) -> dict:
         cfg["exchange"]["api_secret"] = env["EXCHANGE_API_SECRET"]
     if env.get("EXCHANGE_SANDBOX"):
         cfg["exchange"]["sandbox"] = env["EXCHANGE_SANDBOX"].lower() in ("1", "true", "yes")
+
+    if env.get("DISCORD_WEBHOOK_URL"):
+        cfg["alerts"]["discord"]["webhook_url"] = env["DISCORD_WEBHOOK_URL"]
+        cfg["alerts"]["discord"]["enabled"] = True
 
     if env.get("TELEGRAM_BOT_TOKEN"):
         cfg["alerts"]["telegram"]["bot_token"] = env["TELEGRAM_BOT_TOKEN"]

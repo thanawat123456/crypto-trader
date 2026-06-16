@@ -31,6 +31,9 @@ bot:
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
 
 alerts:
+  discord:
+    enabled: false
+    webhook_url: ""      # จาก Discord: Server Settings > Integrations > Webhooks
   telegram:
     enabled: false
     bot_token: ""        # จาก @BotFather

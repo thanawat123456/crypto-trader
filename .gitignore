@@ -9,3 +9,7 @@ config.yaml
 data/
 bot_state.json
 bot.log
+# private keys — ห้าม commit เด็ดขาด
+*.key
+*.pem
+id_rsa*

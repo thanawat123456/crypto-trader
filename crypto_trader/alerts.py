@@ -1,4 +1,4 @@
-"""แจ้งเตือนสัญญาณ — console + ไฟล์ log เสมอ, Telegram ถ้าเปิดใช้ใน config"""
+"""แจ้งเตือนสัญญาณ — console + ไฟล์ log เสมอ, Discord/Telegram ถ้าเปิดใช้ใน config"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -35,9 +35,24 @@ def _telegram(cfg: dict, message: str) -> None:
         _console(f"⚠️  ส่ง Telegram ไม่สำเร็จ: {e}")
 
 
+def _discord(cfg: dict, message: str) -> None:
+    dc = cfg["alerts"].get("discord", {})
+    if not dc.get("enabled"):
+        return
+    webhook = dc.get("webhook_url")
+    if not webhook:
+        _console("⚠️  เปิด Discord แต่ยังไม่ได้ตั้ง webhook_url")
+        return
+    try:
+        requests.post(webhook, json={"content": message}, timeout=10)
+    except Exception as e:  # noqa: BLE001
+        _console(f"⚠️  ส่ง Discord ไม่สำเร็จ: {e}")
+
+
 def notify(cfg: dict, message: str) -> None:
     """ส่งแจ้งเตือนทุกช่องทางที่เปิดใช้"""
     _console(message)
+    _discord(cfg, message)
     _telegram(cfg, message)
 
 
