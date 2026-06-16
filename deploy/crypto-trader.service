@@ -1,0 +1,24 @@
+# systemd service สำหรับรันบอทค้างบน VPS (Oracle Cloud / Ubuntu)
+# ติดตั้ง: ดูขั้นตอนใน DEPLOY_ORACLE.md
+#
+# ไฟล์นี้ให้บอท:
+#   - รันตลอดเวลา (poll ตาม poll_seconds ใน config.yaml)
+#   - รีสตาร์ทเองอัตโนมัติถ้า process ดับ (Restart=always)
+#   - สตาร์ทเองหลัง VPS รีบูต (WantedBy=multi-user.target)
+
+[Unit]
+Description=Crypto Trader Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/crypto-trader
+# แก้ symbol/timeframe ตรงนี้ได้ตามต้องการ
+ExecStart=/home/ubuntu/crypto-trader/.venv/bin/python -m crypto_trader bot BTC/USDT -t 1h
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

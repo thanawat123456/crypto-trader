@@ -15,8 +15,8 @@ defaults:
 # กลยุทธ์เริ่มต้น (ดู crypto_trader/strategy.py)
 strategy:
   name: ema_cross        # ema_cross | rsi | macd
-  fast: 12
-  slow: 26
+  fast: 19               # จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
+  slow: 55
   rsi_period: 14
   rsi_oversold: 30
   rsi_overbought: 70
