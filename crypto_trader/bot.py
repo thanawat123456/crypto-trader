@@ -67,6 +67,8 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
     # โหลดสถานะที่จำไว้ (กันลืม position ตอนรีสตาร์ท)
     saved = state.load_state(symbol, timeframe)
     in_position = bool(saved.get("in_position", False))
+    # เขียนไฟล์ state ทันที เพื่อให้มีไฟล์เสมอ (สำคัญสำหรับ GitHub Actions ที่ต้อง commit)
+    state.save_state(symbol, timeframe, in_position)
 
     alerts.notify(
         cfg,
