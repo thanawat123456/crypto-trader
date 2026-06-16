@@ -28,11 +28,13 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # เก็บ/กู้สถานะบอท (bot_state.json) ข้ามรอบ — กันแจ้งเตือนซ้ำ
+      # เก็บ/กู้สถานะบอทและ journal ข้ามรอบ — กันแจ้งเตือนซ้ำและเก็บประวัติเทรด
       - name: กู้สถานะบอท
         uses: actions/cache@v4
         with:
-          path: bot_state.json
+          path: |
+            bot_state.json
+            trade_journal.csv
           key: bot-state-${{ github.run_id }}
           restore-keys: bot-state-
 

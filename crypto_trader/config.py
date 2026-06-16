@@ -19,6 +19,12 @@ DEFAULTS = {
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
     "bot": {"poll_seconds": 60, "trade_amount": 0.001},
+    "risk": {
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04,
+        "max_position_pct": 1.0,
+        "journal_path": "trade_journal.csv",
+    },
     "alerts": {
         "discord": {"enabled": False, "webhook_url": ""},
         "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},

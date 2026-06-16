@@ -51,26 +51,51 @@ _BARS_PER_YEAR = {
 
 def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> BacktestResult:
     bt = cfg["backtest"]
+    risk = cfg.get("risk", {})
     fee = float(bt["fee"])
     initial = float(bt["initial_cash"])
+    position_size = min(
+        float(bt.get("position_size", 1.0)),
+        float(risk.get("max_position_pct", 1.0)),
+    )
+    stop_loss = float(risk.get("stop_loss_pct", 0.0) or 0.0)
+    take_profit = float(risk.get("take_profit_pct", 0.0) or 0.0)
 
-    position = get_position(df, cfg)
-    # เทรดที่แท่งถัดไปจากที่เกิดสัญญาณ
-    held = position.shift(1).fillna(0)
+    signal_position = get_position(df, cfg).shift(1).fillna(0)
+    closes = df["close"]
 
-    # ผลตอบแทนรายแท่งของสินทรัพย์
-    asset_ret = df["close"].pct_change().fillna(0)
-    # ผลตอบแทนของกลยุทธ์ = ถือเมื่อ held==1
-    strat_ret = asset_ret * held
+    equity_values = []
+    strat_returns = []
+    current_equity = initial
+    held = 0.0
+    entry_price = None
+    trades = 0
 
-    # หักค่าธรรมเนียมตอนเปลี่ยนสถานะ (เข้า/ออก)
-    turnover = held.diff().abs().fillna(held.abs())
-    strat_ret = strat_ret - turnover * fee
+    for i, (_, price) in enumerate(closes.items()):
+        asset_ret = 0.0 if i == 0 else float(price / closes.iloc[i - 1] - 1)
+        strat_ret = asset_ret * held
 
-    equity = (1 + strat_ret).cumprod() * initial
+        target = position_size if signal_position.iloc[i] == 1 else 0.0
+        if held > 0 and entry_price:
+            move = float(price / entry_price - 1)
+            if (stop_loss and move <= -stop_loss) or (take_profit and move >= take_profit):
+                target = 0.0
+
+        turnover = abs(target - held)
+        if turnover > 0:
+            trades += 1
+            strat_ret -= turnover * fee
+            entry_price = float(price) if target > 0 else None
+
+        current_equity *= 1 + strat_ret
+        equity_values.append(current_equity)
+        strat_returns.append(strat_ret)
+        held = target
+
+    equity = pd.Series(equity_values, index=df.index)
+    strat_ret = pd.Series(strat_returns, index=df.index)
 
     # เมตริก
-    trades = int((held.diff().abs() > 0).sum())
     total_return = (equity.iloc[-1] / initial - 1) * 100
     buy_hold_return = (df["close"].iloc[-1] / df["close"].iloc[0] - 1) * 100
 
