@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timezone
 
 DEFAULT_PATH = "bot_state.json"
+PORTFOLIO_KEY = "__portfolio__"
 
 
 def _key(symbol: str, timeframe: str) -> str:
@@ -55,6 +56,42 @@ def save_state(
         "in_position": in_position,
         "entry_price": entry_price,
         "amount": amount,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(all_state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _load_all(path: str = DEFAULT_PATH) -> dict:
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def load_portfolio(initial_cash: float, path: str = DEFAULT_PATH) -> dict:
+    """อ่านพอร์ตจำลอง ถ้ายังไม่มีให้สร้างจาก initial_cash"""
+    all_state = _load_all(path)
+    saved = all_state.get(PORTFOLIO_KEY, {})
+    return {
+        "cash": float(saved.get("cash", initial_cash)),
+        "realized_pnl": float(saved.get("realized_pnl", 0.0)),
+        "updated_at": saved.get("updated_at"),
+    }
+
+
+def save_portfolio(portfolio: dict, path: str = DEFAULT_PATH) -> None:
+    """บันทึกพอร์ตจำลองไว้ในไฟล์ state เดียวกับสถานะราย symbol"""
+    all_state = _load_all(path)
+    all_state[PORTFOLIO_KEY] = {
+        "cash": float(portfolio.get("cash", 0.0)),
+        "realized_pnl": float(portfolio.get("realized_pnl", 0.0)),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 

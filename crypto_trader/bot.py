@@ -30,7 +30,20 @@ def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool)
     return exchange.create_market_sell_order(symbol, amount)
 
 
-def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state):
+def _paper_buy_amount(cfg: dict, portfolio: dict, price: float, fallback_amount: float) -> float:
+    paper = cfg.get("paper", {})
+    if not paper.get("enabled", True):
+        return fallback_amount
+    cash = float(portfolio.get("cash", 0.0))
+    allocation = min(max(float(paper.get("allocation_pct", 0.2)), 0.0), 1.0)
+    budget = cash * allocation
+    fee = float(paper.get("fee", 0.001))
+    if budget <= 0:
+        return 0.0
+    return budget / (float(price) * (1 + fee))
+
+
+def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state, portfolio):
     """ทำงานหนึ่งรอบ: เช็คสัญญาณ + เทรดถ้าจำเป็น คืนสถานะใหม่"""
     in_position = bool(position_state.get("in_position", False))
     entry_price = position_state.get("entry_price")
@@ -54,16 +67,34 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             exit_reason = "take_profit"
 
     if signal == "BUY" and not in_position:
-        _place_order(exchange, symbol, "buy", amount, dry_run)
-        position_state = {"in_position": True, "entry_price": price, "amount": amount}
-        state.save_state(symbol, timeframe, True, entry_price=price, amount=amount)
-        record_trade(journal_path, symbol, timeframe, "BUY", price, amount, "signal")
+        buy_amount = _paper_buy_amount(cfg, portfolio, price, amount) if dry_run else amount
+        if buy_amount <= 0:
+            alerts._console(f"… ข้าม BUY เพราะเงินสดจำลองไม่พอ | {symbol} @ {price:,.2f}")
+            position_state["last_price"] = price
+            return position_state, portfolio
+        _place_order(exchange, symbol, "buy", buy_amount, dry_run)
+        if dry_run and cfg.get("paper", {}).get("enabled", True):
+            fee = float(cfg.get("paper", {}).get("fee", 0.001))
+            portfolio["cash"] = float(portfolio.get("cash", 0.0)) - (buy_amount * price * (1 + fee))
+            state.save_portfolio(portfolio)
+        position_state = {"in_position": True, "entry_price": price, "amount": buy_amount}
+        state.save_state(symbol, timeframe, True, entry_price=price, amount=buy_amount)
+        record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, "signal")
         alerts.notify(cfg, alerts.signal_message(symbol, timeframe, "BUY", price))
     elif (signal == "SELL" or exit_reason) and in_position:
         reason = exit_reason or "signal"
         sell_amount = float(saved_amount)
         _place_order(exchange, symbol, "sell", sell_amount, dry_run)
-        pnl = (price - float(entry_price or price)) * sell_amount
+        gross_pnl = (price - float(entry_price or price)) * sell_amount
+        pnl = gross_pnl
+        if dry_run and cfg.get("paper", {}).get("enabled", True):
+            fee = float(cfg.get("paper", {}).get("fee", 0.001))
+            entry_cost = float(entry_price or price) * sell_amount
+            exit_value = price * sell_amount
+            pnl = exit_value * (1 - fee) - entry_cost * (1 + fee)
+            portfolio["cash"] = float(portfolio.get("cash", 0.0)) + exit_value * (1 - fee)
+            portfolio["realized_pnl"] = float(portfolio.get("realized_pnl", 0.0)) + pnl
+            state.save_portfolio(portfolio)
         position_state = {"in_position": False, "entry_price": None, "amount": None}
         state.save_state(symbol, timeframe, False, entry_price=None, amount=None)
         record_trade(journal_path, symbol, timeframe, "SELL", price, sell_amount, reason, pnl)
@@ -74,7 +105,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         alerts._console(f"… ไม่มีสัญญาณใหม่ ({where}) | {symbol} @ {price:,.2f}")
 
     position_state["last_price"] = price
-    return position_state
+    return position_state, portfolio
 
 
 def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False) -> None:
@@ -87,6 +118,14 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
     dry_run = not has_keys
     sandbox = cfg["exchange"].get("sandbox", True)
     mode = "DRY-RUN" if dry_run else ("PAPER" if sandbox else "LIVE 💰")
+    paper_cfg = cfg.get("paper", {})
+    portfolio = state.load_portfolio(float(paper_cfg.get("initial_cash", 300)))
+    if dry_run and paper_cfg.get("enabled", True):
+        state.save_portfolio(portfolio)
+    size_text = f"เทรดครั้งละ {amount}"
+    if dry_run and paper_cfg.get("enabled", True):
+        allocation = float(paper_cfg.get("allocation_pct", 0.2)) * 100
+        size_text = f"paper allocation={allocation:.0f}% | cash≈{portfolio['cash']:,.2f}"
 
     # โหลดสถานะที่จำไว้ (กันลืม position ตอนรีสตาร์ท)
     saved = state.load_state(symbol, timeframe)
@@ -108,14 +147,14 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         cfg,
         f"🤖 เริ่มบอท [{mode}] | {symbol} {timeframe} | กลยุทธ์={cfg['strategy']['name']} "
         f"(fast={cfg['strategy']['fast']}/slow={cfg['strategy']['slow']}) | "
-        f"เทรดครั้งละ {amount} | สถานะเริ่ม: {'ถืออยู่' if position_state['in_position'] else 'ถือเงินสด'}",
+        f"{size_text} | สถานะเริ่ม: {'ถืออยู่' if position_state['in_position'] else 'ถือเงินสด'}",
     )
 
     fails = 0
     while True:
         try:
-            position_state = _tick(
-                exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state
+            position_state, portfolio = _tick(
+                exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state, portfolio
             )
             if bot_cfg.get("summary_enabled", True):
                 journal_path = cfg.get("risk", {}).get("journal_path", "trade_journal.csv")
@@ -125,6 +164,7 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
                     timeframe,
                     position_state,
                     position_state.get("last_price"),
+                    portfolio,
                 )
                 alerts.notify(cfg, summary)
             fails = 0  # สำเร็จ → รีเซ็ตตัวนับ

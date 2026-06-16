@@ -33,6 +33,12 @@ bot:
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
   summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
 
+paper:
+  enabled: true           # จำลองพอร์ตใน DRY-RUN โดยไม่ส่ง order จริง
+  initial_cash: 300       # ทุนจำลองเริ่มต้น (USDT)
+  allocation_pct: 0.2     # ใช้เงินสดสูงสุด 20% ต่อไม้
+  fee: 0.001              # fee จำลอง 0.1%
+
 risk:
   stop_loss_pct: 0.02    # ขาดทุน 2% จากราคาเข้าแล้วขายออก
   take_profit_pct: 0.04  # กำไร 4% จากราคาเข้าแล้วขายออก

@@ -63,6 +63,7 @@ def performance_summary(
     timeframe: str,
     position_state: dict,
     current_price: float | None = None,
+    portfolio: dict | None = None,
 ) -> str:
     rows = [
         row for row in _read_rows(path)
@@ -108,4 +109,9 @@ def performance_summary(
         lines.append(f"Entry≈{float(entry_price):,.2f} | Amount={float(amount or 0):.8f}")
     if unrealized is not None:
         lines.append(f"Unrealized PnL≈{unrealized:,.2f}")
+    if portfolio:
+        lines.append(
+            f"Paper cash≈{float(portfolio.get('cash', 0.0)):,.2f} | "
+            f"Paper realized≈{float(portfolio.get('realized_pnl', 0.0)):,.2f}"
+        )
     return "\n".join(lines)
