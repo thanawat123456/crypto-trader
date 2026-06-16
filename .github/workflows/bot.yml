@@ -41,8 +41,13 @@ jobs:
       - name: ติดตั้ง dependencies
         run: pip install -r requirements.txt
 
-      - name: รันบอท 1 รอบ
-        run: python -m crypto_trader bot BTC/USDT -t 1h --once
+      - name: รันบอท 1 รอบต่อ symbol
+        run: |
+          symbols=("BTC/USDT" "ETH/USDT" "SOL/USDT" "XRP/USDT" "ADA/USDT")
+          for symbol in "${symbols[@]}"; do
+            echo "=== Running $symbol ==="
+            python -m crypto_trader bot "$symbol" -t 1h --once
+          done
 
       - name: อัปโหลดสถานะและ journal
         uses: actions/upload-artifact@v4
