@@ -43,3 +43,12 @@ jobs:
 
       - name: รันบอท 1 รอบ
         run: python -m crypto_trader bot BTC/USDT -t 1h --once
+
+      - name: อัปโหลดสถานะและ journal
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-bot-state
+          path: |
+            bot_state.json
+            trade_journal.csv
+          if-no-files-found: warn
