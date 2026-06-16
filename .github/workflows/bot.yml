@@ -5,9 +5,9 @@ name: crypto-trader-bot
 # โหมด DRY-RUN: บอทเช็คสัญญาณ + ส่งแจ้งเตือนเข้า Discord (ไม่กดออเดอร์เอง)
 on:
   schedule:
-    # ทุก 30 นาที (UTC) — เหมาะกับ timeframe 1h/4h
+    # ทุก 30 นาที (UTC) แต่เลี่ยงนาที 00/30 เพราะ GitHub Actions ช่วงนั้นคนใช้เยอะ
     # GitHub อาจรันช้ากว่ากำหนด 5-15 นาทีในช่วงคนใช้เยอะ ถือว่าปกติ
-    - cron: "*/30 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:        # ปุ่มกดรันเองจากหน้าเว็บ GitHub
 
 concurrency:
@@ -40,6 +40,12 @@ jobs:
 
       - name: ติดตั้ง dependencies
         run: pip install -r requirements.txt
+
+      - name: แสดง trigger ของ workflow
+        run: |
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "ref=${GITHUB_REF}"
+          echo "sha=${GITHUB_SHA}"
 
       - name: รันบอท 1 รอบต่อ symbol
         run: |
