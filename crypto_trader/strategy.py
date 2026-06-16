@@ -13,12 +13,22 @@ import pandas as pd
 from . import indicators as ind
 
 
+def _apply_trend_filter(df: pd.DataFrame, cfg: dict, pos: pd.Series) -> pd.Series:
+    """กรอง long signal ออกเมื่อราคาอยู่ใต้ EMA ระยะยาว"""
+    s = cfg["strategy"]
+    if not s.get("trend_filter_enabled", False):
+        return pos
+    trend = ind.ema(df["close"], int(s.get("trend_ema_period", 200)))
+    return pos.where(df["close"] > trend, 0).astype(int)
+
+
 def ema_cross(df: pd.DataFrame, cfg: dict) -> pd.Series:
     """ซื้อเมื่อ EMA เร็วตัดขึ้นเหนือ EMA ช้า, ขายเมื่อตัดลง"""
     s = cfg["strategy"]
     fast = ind.ema(df["close"], s["fast"])
     slow = ind.ema(df["close"], s["slow"])
-    return (fast > slow).astype(int)
+    pos = (fast > slow).astype(int)
+    return _apply_trend_filter(df, cfg, pos)
 
 
 def rsi_strategy(df: pd.DataFrame, cfg: dict) -> pd.Series:
@@ -37,14 +47,15 @@ def rsi_strategy(df: pd.DataFrame, cfg: dict) -> pd.Series:
         elif holding == 1 and val > s["rsi_overbought"]:
             holding = 0
         pos.iloc[i] = holding
-    return pos
+    return _apply_trend_filter(df, cfg, pos)
 
 
 def macd_strategy(df: pd.DataFrame, cfg: dict) -> pd.Series:
     """ซื้อเมื่อ MACD ตัดขึ้นเหนือ signal line, ขายเมื่อตัดลง"""
     s = cfg["strategy"]
     macd_line, signal_line, _ = ind.macd(df["close"], s["fast"], s["slow"])
-    return (macd_line > signal_line).astype(int)
+    pos = (macd_line > signal_line).astype(int)
+    return _apply_trend_filter(df, cfg, pos)
 
 
 STRATEGIES = {

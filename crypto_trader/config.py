@@ -16,6 +16,8 @@ DEFAULTS = {
         "rsi_period": 14,
         "rsi_oversold": 30,
         "rsi_overbought": 70,
+        "trend_filter_enabled": False,
+        "trend_ema_period": 200,
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
     "bot": {"poll_seconds": 60, "trade_amount": 0.001, "summary_enabled": True},
