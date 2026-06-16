@@ -11,8 +11,8 @@ DEFAULTS = {
     "defaults": {"symbol": "BTC/USDT", "timeframe": "1h", "limit": 500},
     "strategy": {
         "name": "ema_cross",
-        "fast": 12,
-        "slow": 26,
+        "fast": 19,           # จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
+        "slow": 55,
         "rsi_period": 14,
         "rsi_oversold": 30,
         "rsi_overbought": 70,
