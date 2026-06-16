@@ -29,6 +29,7 @@ backtest:
 bot:
   poll_seconds: 60       # เช็คสัญญาณทุกกี่วินาที
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
+  summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
 
 risk:
   stop_loss_pct: 0.02    # ขาดทุน 2% จากราคาเข้าแล้วขายออก

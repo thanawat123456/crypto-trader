@@ -16,7 +16,7 @@ import time
 
 from . import alerts, state
 from .data import fetch_ohlcv, latest_price
-from .journal import record_trade
+from .journal import performance_summary, record_trade
 from .strategy import latest_signal
 
 MAX_BACKOFF = 600  # หน่วงสูงสุด 10 นาทีเมื่อ error ติดกัน
@@ -73,6 +73,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         where = "ถืออยู่" if in_position else "ถือเงินสด"
         alerts._console(f"… ไม่มีสัญญาณใหม่ ({where}) | {symbol} @ {price:,.2f}")
 
+    position_state["last_price"] = price
     return position_state
 
 
@@ -116,6 +117,16 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
             position_state = _tick(
                 exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state
             )
+            if bot_cfg.get("summary_enabled", True):
+                journal_path = cfg.get("risk", {}).get("journal_path", "trade_journal.csv")
+                summary = performance_summary(
+                    journal_path,
+                    symbol,
+                    timeframe,
+                    position_state,
+                    position_state.get("last_price"),
+                )
+                alerts.notify(cfg, summary)
             fails = 0  # สำเร็จ → รีเซ็ตตัวนับ
         except Exception as e:  # noqa: BLE001
             fails += 1

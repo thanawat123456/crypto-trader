@@ -18,7 +18,7 @@ DEFAULTS = {
         "rsi_overbought": 70,
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
-    "bot": {"poll_seconds": 60, "trade_amount": 0.001},
+    "bot": {"poll_seconds": 60, "trade_amount": 0.001, "summary_enabled": True},
     "risk": {
         "stop_loss_pct": 0.02,
         "take_profit_pct": 0.04,
