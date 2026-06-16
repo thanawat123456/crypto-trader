@@ -1,0 +1,49 @@
+"""จำสถานะบอทลงไฟล์ JSON — กันบอท "ลืม" ว่าถือเหรียญอยู่ไหมตอนรีสตาร์ท
+
+สำคัญมากสำหรับการรัน 24/7: ถ้าบอทดับแล้วเปิดใหม่โดยไม่จำสถานะ
+มันอาจซื้อซ้ำหรือขายทั้งที่ไม่ได้ถือ
+"""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timezone
+
+DEFAULT_PATH = "bot_state.json"
+
+
+def _key(symbol: str, timeframe: str) -> str:
+    return f"{symbol}|{timeframe}"
+
+
+def load_state(symbol: str, timeframe: str, path: str = DEFAULT_PATH) -> dict:
+    """อ่านสถานะของคู่ symbol+timeframe (คืน default ถ้ายังไม่มี)"""
+    if not os.path.exists(path):
+        return {"in_position": False, "updated_at": None}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            all_state = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"in_position": False, "updated_at": None}
+    return all_state.get(_key(symbol, timeframe), {"in_position": False, "updated_at": None})
+
+
+def save_state(symbol: str, timeframe: str, in_position: bool, path: str = DEFAULT_PATH) -> None:
+    """บันทึกสถานะแบบ atomic (เขียนไฟล์ temp แล้ว replace กันไฟล์พังถ้าดับกลางคัน)"""
+    all_state = {}
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                all_state = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            all_state = {}
+
+    all_state[_key(symbol, timeframe)] = {
+        "in_position": in_position,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(all_state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)

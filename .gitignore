@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+config.yaml
+*.csv
+*.png
+.DS_Store
+data/
+bot_state.json
+bot.log

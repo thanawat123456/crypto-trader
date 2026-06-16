@@ -1,0 +1,37 @@
+# คัดลอกไฟล์นี้เป็น config.yaml แล้วใส่ค่าของคุณ
+# cp config.example.yaml config.yaml
+
+exchange:
+  name: binance          # ชื่อ exchange ตาม ccxt (binance, okx, bybit, ...)
+  api_key: ""            # ใส่ API key (ต้องใช้เฉพาะตอนรันบอทเทรดจริง/sandbox)
+  api_secret: ""
+  sandbox: true          # true = paper trading (เงินปลอม), false = เงินจริง! ระวัง
+
+defaults:
+  symbol: BTC/USDT
+  timeframe: 1h          # 1m, 5m, 15m, 1h, 4h, 1d
+  limit: 500             # จำนวนแท่งเทียนที่ดึง
+
+# กลยุทธ์เริ่มต้น (ดู crypto_trader/strategy.py)
+strategy:
+  name: ema_cross        # ema_cross | rsi | macd
+  fast: 12
+  slow: 26
+  rsi_period: 14
+  rsi_oversold: 30
+  rsi_overbought: 70
+
+backtest:
+  initial_cash: 10000    # USDT
+  fee: 0.001             # 0.1% ต่อการเทรด
+  position_size: 1.0     # สัดส่วนเงินที่ลงต่อไม้ (1.0 = all-in)
+
+bot:
+  poll_seconds: 60       # เช็คสัญญาณทุกกี่วินาที
+  trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
+
+alerts:
+  telegram:
+    enabled: false
+    bot_token: ""        # จาก @BotFather
+    chat_id: ""

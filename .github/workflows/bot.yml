@@ -1,0 +1,53 @@
+name: crypto-trader-bot
+
+# รันบอทอัตโนมัติบน server ของ GitHub (ฟรี)
+on:
+  schedule:
+    # ทุก 30 นาที (UTC) — เหมาะกับ timeframe 1h/4h
+    # หมายเหตุ: GitHub อาจรันช้ากว่ากำหนด 5-15 นาทีในช่วงคนใช้เยอะ ถือว่าปกติ
+    - cron: "*/30 * * * *"
+  workflow_dispatch:        # ปุ่มกดรันเองจากหน้าเว็บ GitHub
+
+# ต้องมีสิทธิ์เขียน เพื่อ commit สถานะบอท (bot_state.json) กลับเข้า repo
+permissions:
+  contents: write
+
+# กันรันซ้อนกันถ้ารอบก่อนยังไม่จบ
+concurrency:
+  group: trading-bot
+  cancel-in-progress: false
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    env:
+      EXCHANGE_API_KEY: ${{ secrets.EXCHANGE_API_KEY }}
+      EXCHANGE_API_SECRET: ${{ secrets.EXCHANGE_API_SECRET }}
+      EXCHANGE_SANDBOX: ${{ secrets.EXCHANGE_SANDBOX }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: ติดตั้ง dependencies
+        run: pip install -r requirements.txt
+
+      - name: รันบอท 1 รอบ
+        run: python -m crypto_trader bot BTC/USDT -t 1h --once
+
+      - name: บันทึกสถานะบอทกลับเข้า repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -f bot_state.json
+          if git diff --staged --quiet; then
+            echo "สถานะไม่เปลี่ยน — ไม่ต้อง commit"
+          else
+            git commit -m "update bot state [skip ci]"
+            git push
+          fi
