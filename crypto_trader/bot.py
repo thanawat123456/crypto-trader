@@ -17,7 +17,7 @@ import time
 from . import alerts, state
 from .data import fetch_ohlcv, latest_price
 from .journal import performance_summary, record_trade
-from .strategy import latest_signal
+from .strategy import get_position, latest_signal
 
 MAX_BACKOFF = 600  # หน่วงสูงสุด 10 นาทีเมื่อ error ติดกัน
 
@@ -56,6 +56,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
     df = fetch_ohlcv(exchange, symbol, timeframe, limit)
     closed = df.iloc[:-1]  # ตัดแท่งปัจจุบันที่ยังวิ่งอยู่ออก
     signal = latest_signal(closed, cfg)
+    desired_position = int(get_position(closed, cfg).iloc[-1]) if len(closed) else 0
     price = latest_price(exchange, symbol)
 
     exit_reason = None
@@ -66,7 +67,18 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         elif take_profit and move >= take_profit:
             exit_reason = "take_profit"
 
+    buy_reason = None
     if signal == "BUY" and not in_position:
+        buy_reason = "signal"
+    elif (
+        dry_run
+        and cfg.get("bot", {}).get("enter_on_current_signal", True)
+        and desired_position == 1
+        and not in_position
+    ):
+        buy_reason = "current_signal"
+
+    if buy_reason:
         buy_amount = _paper_buy_amount(cfg, portfolio, price, amount) if dry_run else amount
         if buy_amount <= 0:
             alerts._console(f"… ข้าม BUY เพราะเงินสดจำลองไม่พอ | {symbol} @ {price:,.2f}")
@@ -79,8 +91,9 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             state.save_portfolio(portfolio)
         position_state = {"in_position": True, "entry_price": price, "amount": buy_amount}
         state.save_state(symbol, timeframe, True, entry_price=price, amount=buy_amount)
-        record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, "signal")
-        alerts.notify(cfg, alerts.signal_message(symbol, timeframe, "BUY", price))
+        record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, buy_reason)
+        msg = alerts.signal_message(symbol, timeframe, "BUY", price)
+        alerts.notify(cfg, f"{msg} | reason={buy_reason}")
     elif (signal == "SELL" or exit_reason) and in_position:
         reason = exit_reason or "signal"
         sell_amount = float(saved_amount)

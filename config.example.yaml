@@ -32,6 +32,7 @@ bot:
   poll_seconds: 60       # เช็คสัญญาณทุกกี่วินาที
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
   summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
+  enter_on_current_signal: true # DRY-RUN: ถ้ากลยุทธ์บอกว่าควรถืออยู่แล้ว ให้จำลอง BUY ได้
 
 paper:
   enabled: true           # จำลองพอร์ตใน DRY-RUN โดยไม่ส่ง order จริง

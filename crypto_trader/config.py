@@ -20,7 +20,12 @@ DEFAULTS = {
         "trend_ema_period": 200,
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
-    "bot": {"poll_seconds": 60, "trade_amount": 0.001, "summary_enabled": True},
+    "bot": {
+        "poll_seconds": 60,
+        "trade_amount": 0.001,
+        "summary_enabled": True,
+        "enter_on_current_signal": True,
+    },
     "paper": {
         "enabled": True,
         "initial_cash": 300,
