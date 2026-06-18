@@ -16,6 +16,7 @@ import time
 
 from . import alerts, state
 from .data import fetch_ohlcv, latest_price
+from .indicators import ema
 from .journal import performance_summary, record_trade
 from .strategy import get_position, latest_signal
 
@@ -41,6 +42,30 @@ def _paper_buy_amount(cfg: dict, portfolio: dict, price: float, fallback_amount:
     if budget <= 0:
         return 0.0
     return budget / (float(price) * (1 + fee))
+
+
+def _market_allows_buy(exchange, cfg: dict) -> tuple[bool, str]:
+    market = cfg.get("market_filter", {})
+    if not market.get("enabled", True):
+        return True, "market_filter_disabled"
+
+    symbol = market.get("symbol", "BTC/USDT")
+    timeframe = market.get("timeframe", "4h")
+    period = int(market.get("ema_period", 200))
+    try:
+        df = fetch_ohlcv(exchange, symbol, timeframe, max(period + 5, 250))
+    except Exception as e:  # noqa: BLE001
+        return False, f"market_filter_error={e}"
+
+    closed = df.iloc[:-1]
+    if len(closed) < period:
+        return False, f"market_filter_wait_data={len(closed)}/{period}"
+
+    close = float(closed["close"].iloc[-1])
+    trend = float(ema(closed["close"], period).iloc[-1])
+    if close > trend:
+        return True, f"market_bullish {symbol} {timeframe} close={close:,.2f} ema{period}={trend:,.2f}"
+    return False, f"market_not_bullish {symbol} {timeframe} close={close:,.2f} ema{period}={trend:,.2f}"
 
 
 def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state, portfolio):
@@ -79,6 +104,11 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         buy_reason = "current_signal"
 
     if buy_reason:
+        allowed, market_reason = _market_allows_buy(exchange, cfg)
+        if not allowed:
+            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {market_reason}")
+            position_state["last_price"] = price
+            return position_state, portfolio
         buy_amount = _paper_buy_amount(cfg, portfolio, price, amount) if dry_run else amount
         if buy_amount <= 0:
             alerts._console(f"… ข้าม BUY เพราะเงินสดจำลองไม่พอ | {symbol} @ {price:,.2f}")

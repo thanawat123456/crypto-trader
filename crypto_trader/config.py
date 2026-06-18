@@ -32,6 +32,12 @@ DEFAULTS = {
         "allocation_pct": 0.2,
         "fee": 0.001,
     },
+    "market_filter": {
+        "enabled": True,
+        "symbol": "BTC/USDT",
+        "timeframe": "4h",
+        "ema_period": 200,
+    },
     "risk": {
         "stop_loss_pct": 0.02,
         "take_profit_pct": 0.04,
