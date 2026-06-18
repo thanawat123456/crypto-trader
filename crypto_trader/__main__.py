@@ -47,6 +47,8 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
             sp.add_argument("--min-volume", type=float, default=500_000,
                             help="volume 24h ขั้นต่ำ (quote) — กันเหรียญสภาพคล่องต่ำ/ปั่น")
             sp.add_argument("--notify", action="store_true", help="ส่งผลเข้า Discord ด้วย")
+            sp.add_argument("--every-hours", type=float, default=0,
+                            help="ทำเฉพาะถ้าผ่านมาแล้ว N ชม.ตั้งแต่ครั้งก่อน (0 = ทำทันที)")
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
         if name == "montecarlo":
@@ -168,6 +170,16 @@ def main(argv=None) -> int:
 
     elif args.command == "scan":
         from .scanner import format_scan, scan_market
+        if args.every_hours > 0:
+            from datetime import datetime, timezone
+
+            from . import state
+            last = state.get_marker("scan")
+            if last:
+                elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
+                if elapsed < args.every_hours:
+                    print(f"ยังไม่ถึงรอบ scan (ผ่าน {elapsed:.1f}/{args.every_hours:.0f} ชม.)")
+                    return 0
         ex = make_exchange(cfg)
         rows, n_liquid = scan_market(
             ex, quote=args.quote, top_by_volume=args.top_volume,
@@ -179,6 +191,9 @@ def main(argv=None) -> int:
         if args.notify:
             from . import alerts
             alerts.notify(cfg, msg)
+        if args.every_hours > 0:
+            from . import state
+            state.set_marker("scan")
 
     elif args.command == "validate":
         from datetime import datetime, timezone

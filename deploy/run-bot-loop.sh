@@ -9,6 +9,8 @@ INTERVAL_SECONDS="${INTERVAL_SECONDS:-1800}"
 RUN_ONCE="${RUN_ONCE:-false}"
 REPORT_EVERY_HOURS="${REPORT_EVERY_HOURS:-24}"   # ส่งสรุปผลเข้า Discord ทุกกี่ชม. (0 = ปิด)
 VALIDATE_EVERY_HOURS="${VALIDATE_EVERY_HOURS:-168}"  # ตรวจสุขภาพกลยุทธ์ทุกกี่ชม. (168=สัปดาห์, 0 = ปิด)
+SCAN_EVERY_HOURS="${SCAN_EVERY_HOURS:-168}"          # สแกนเหรียญ momentum เข้า Discord ทุกกี่ชม. (0 = ปิด)
+SCAN_QUOTE="${SCAN_QUOTE:-USD}"                      # quote สำหรับสแกน (Kraken=USD)
 
 SYMBOLS=("BTC/USD" "ETH/USD" "SOL/USD" "XRP/USD" "ADA/USD")
 
@@ -30,6 +32,12 @@ while true; do
   # ตรวจสุขภาพกลยุทธ์รายสัปดาห์ (เตือนถ้าเสื่อม — ไม่ปรับ risk เอง)
   if [ "$VALIDATE_EVERY_HOURS" != "0" ]; then
     "$PYTHON" -m crypto_trader validate --every-hours "$VALIDATE_EVERY_HOURS" || true
+  fi
+
+  # สแกนเหรียญ momentum แรง (สภาพคล่องดี) เข้า Discord รายสัปดาห์ — read-only ไม่เทรด
+  if [ "$SCAN_EVERY_HOURS" != "0" ]; then
+    "$PYTHON" -m crypto_trader scan -t 4h --quote "$SCAN_QUOTE" --notify \
+      --every-hours "$SCAN_EVERY_HOURS" || true
   fi
 
   if [ "$RUN_ONCE" = "true" ]; then

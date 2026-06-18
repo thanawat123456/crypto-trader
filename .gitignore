@@ -17,3 +17,4 @@ id_rsa*
 retry-launch.sh
 retry-launch-arm.sh
 dashboard_data/
+backups/
