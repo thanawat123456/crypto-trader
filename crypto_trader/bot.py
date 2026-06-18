@@ -15,6 +15,7 @@ from __future__ import annotations
 import time
 
 from . import alerts, state
+from .backtest import _BARS_PER_YEAR
 from .data import fetch_ohlcv, latest_price
 from .indicators import atr, ema, rsi
 from .journal import loss_cooldown_reason, performance_summary, record_trade
@@ -33,7 +34,7 @@ def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool)
 
 def _paper_buy_amount(
     cfg: dict, portfolio: dict, price: float, fallback_amount: float,
-    stop_distance: float | None = None,
+    stop_distance: float | None = None, realized_vol: float | None = None,
 ) -> float:
     paper = cfg.get("paper", {})
     if not paper.get("enabled", True):
@@ -50,6 +51,11 @@ def _paper_buy_amount(
         risk_pct = min(max(float(paper.get("risk_per_trade_pct", 0.01)), 0.0), 1.0)
         position_value = (cash * risk_pct) / stop_distance
         budget = min(position_value, cash)  # ห้ามเกินเงินสดที่มี
+    elif mode == "volatility" and realized_vol and realized_vol > 0:
+        # Volatility targeting (TSMOM literature): ผันผวนสูง→ไม้เล็ก, ผันผวนต่ำ→ไม้ใหญ่
+        # ขนาด ∝ target_vol / realized_vol, จำกัดไม่เกินเงินสด (ไม่ใช้ margin)
+        target_vol = float(paper.get("target_vol", 0.40))
+        budget = cash * min(target_vol / realized_vol, 1.0)
     else:
         allocation = min(max(float(paper.get("allocation_pct", 0.2)), 0.0), 1.0)
         budget = cash * allocation
@@ -126,6 +132,42 @@ def _symbol_allows_buy(exchange, cfg: dict, symbol: str) -> tuple[bool, str]:
     )
 
 
+def _momentum_allows_buy(exchange, cfg: dict, symbol: str) -> tuple[bool, str]:
+    """อนุญาตซื้อเฉพาะเหรียญที่ momentum แรงติด top_k ในตะกร้า (relative momentum)
+
+    จาก SSRN (Foltice & Langer) + Momentum book: ซื้อ long ตัว "ผู้ชนะ" เน้นไม่กี่ตัว
+    ได้ risk-adjusted return ดีกว่ากระจายทั้งตะกร้า
+    """
+    mf = cfg.get("momentum_filter", {})
+    if not mf.get("enabled", False):
+        return True, "momentum_filter_disabled"
+
+    tf = mf.get("timeframe", "4h")
+    lookback = int(mf.get("lookback", 30))
+    top_k = int(mf.get("top_k", 3))
+    symbols = list(cfg.get("bot", {}).get("symbols") or [symbol])
+    if symbol not in symbols:
+        symbols.append(symbol)
+
+    rets = {}
+    for s in symbols:
+        try:
+            d = fetch_ohlcv(exchange, s, tf, lookback + 5)
+            close = d["close"]
+            if len(close) > lookback:
+                rets[s] = float(close.iloc[-1] / close.iloc[-1 - lookback] - 1)
+        except Exception:  # noqa: BLE001
+            continue
+
+    if symbol not in rets:
+        return True, "momentum_no_data"  # fail-open: ดึงข้อมูลไม่ได้ก็ไม่บล็อก
+    ranked = sorted(rets, key=rets.get, reverse=True)
+    rank = ranked.index(symbol) + 1
+    if rank <= top_k:
+        return True, f"momentum_top{top_k} rank={rank}/{len(ranked)} ret={rets[symbol]:+.1%}"
+    return False, f"momentum_weak rank={rank}/{len(ranked)} (เอาเฉพาะ top{top_k})"
+
+
 def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state, portfolio):
     """ทำงานหนึ่งรอบ: เช็คสัญญาณ + เทรดถ้าจำเป็น คืนสถานะใหม่"""
     in_position = bool(position_state.get("in_position", False))
@@ -152,6 +194,14 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             atr_pct = atr_val / price
             sl_dist = float(risk.get("atr_sl_mult", 2.0)) * atr_pct
             tp_dist = float(risk.get("atr_tp_mult", 3.0)) * atr_pct
+
+    # ความผันผวนต่อปี (สำหรับ volatility-targeting sizing — TSMOM literature)
+    realized_vol = None
+    if len(closed) > 20:
+        rets = closed["close"].pct_change().dropna().tail(100)
+        vol = float(rets.std())
+        if vol > 0:
+            realized_vol = vol * (_BARS_PER_YEAR.get(timeframe, 8760) ** 0.5)
 
     exit_reason = None
     peak_price = position_state.get("peak_price")
@@ -218,6 +268,12 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {smart_reason}")
             position_state["last_price"] = price
             return position_state, portfolio
+        # relative momentum: ซื้อเฉพาะเหรียญที่แรงสุดในตะกร้า
+        allowed, mom_reason = _momentum_allows_buy(exchange, cfg, symbol)
+        if not allowed:
+            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {mom_reason}")
+            position_state["last_price"] = price
+            return position_state, portfolio
         # คุมความเสี่ยงพอร์ตรวม: จำกัดจำนวนไม้ที่ถือพร้อมกัน
         max_concurrent = int(risk.get("max_concurrent_positions", 0) or 0)
         if max_concurrent > 0:
@@ -231,7 +287,8 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
                 position_state["last_price"] = price
                 return position_state, portfolio
         buy_amount = (
-            _paper_buy_amount(cfg, portfolio, price, amount, stop_distance=sl_dist)
+            _paper_buy_amount(cfg, portfolio, price, amount, stop_distance=sl_dist,
+                              realized_vol=realized_vol)
             if dry_run else amount
         )
         if buy_amount <= 0:
@@ -298,12 +355,14 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         state.save_portfolio(portfolio)
     size_text = f"เทรดครั้งละ {amount}"
     if dry_run and paper_cfg.get("enabled", True):
-        if paper_cfg.get("sizing_mode") == "risk":
-            risk_pct = float(paper_cfg.get("risk_per_trade_pct", 0.01)) * 100
-            size_text = f"paper risk={risk_pct:.1f}%/ไม้ | cash≈{portfolio['cash']:,.2f}"
+        mode = paper_cfg.get("sizing_mode")
+        cash_txt = f"cash≈{portfolio['cash']:,.2f}"
+        if mode == "risk":
+            size_text = f"paper risk={float(paper_cfg.get('risk_per_trade_pct', 0.01)) * 100:.1f}%/ไม้ | {cash_txt}"
+        elif mode == "volatility":
+            size_text = f"paper vol-target={float(paper_cfg.get('target_vol', 0.4)) * 100:.0f}% | {cash_txt}"
         else:
-            allocation = float(paper_cfg.get("allocation_pct", 0.2)) * 100
-            size_text = f"paper allocation={allocation:.0f}% | cash≈{portfolio['cash']:,.2f}"
+            size_text = f"paper allocation={float(paper_cfg.get('allocation_pct', 0.2)) * 100:.0f}% | {cash_txt}"
 
     # โหลดสถานะที่จำไว้ (กันลืม position ตอนรีสตาร์ท)
     saved = state.load_state(symbol, timeframe)

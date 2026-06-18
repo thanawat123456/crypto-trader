@@ -150,6 +150,27 @@ def heikin_stoch(df: pd.DataFrame, cfg: dict) -> pd.Series:
     return _apply_trend_filter(df, cfg, pos)
 
 
+def tsmom(df: pd.DataFrame, cfg: dict) -> pd.Series:
+    """Time-Series (Absolute) Momentum — long เมื่อผลตอบแทนย้อนหลังของเหรียญเองเป็นบวก
+
+    จาก Moskowitz/Ooi/Pedersen (2012), Levy & Lopes (2021), Martin (2023):
+    รวมหลาย lookback (เร็ว+ช้า) แล้วโหวต → ถือ long ถ้าเสียงข้างมากเป็นเทรนด์ขึ้น
+    (long-only สำหรับคริปโต — เวอร์ชันเต็มจะ short ตอนเทรนด์ลง)
+    """
+    s = cfg["strategy"]
+    lookbacks = s.get("tsmom_lookbacks", [20, 60, 120])
+    close = df["close"]
+    votes = pd.Series(0.0, index=df.index)
+    for lb in lookbacks:
+        votes += (close / close.shift(int(lb)) - 1 > 0).astype(float)
+    # ต้องมีเสียงข้างมากของ lookback เห็นพ้องว่าเป็นขาขึ้น
+    pos = (votes >= (len(lookbacks) / 2.0)).astype(int)
+    longest = max(lookbacks)
+    if longest < len(pos):
+        pos.iloc[:longest] = 0  # ช่วงข้อมูลยังไม่ครบ lookback ยาวสุด = ถือเงินสด
+    return _apply_trend_filter(df, cfg, pos)
+
+
 STRATEGIES = {
     "ema_cross": ema_cross,
     "rsi": rsi_strategy,
@@ -157,6 +178,7 @@ STRATEGIES = {
     "bb_squeeze": bb_squeeze,
     "rsi2": rsi2_strategy,
     "heikin_stoch": heikin_stoch,
+    "tsmom": tsmom,
 }
 
 

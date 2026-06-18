@@ -24,6 +24,9 @@ class BacktestResult:
     sharpe: float
     final_value: float
     initial_cash: float
+    sortino: float = 0.0       # เหมือน Sharpe แต่ลงโทษเฉพาะความผันผวนขาลง
+    profit_factor: float = 0.0 # กำไรรวม / ขาดทุนรวม (>1 = มีเอดจ์)
+    recovery_factor: float = 0.0  # ผลตอบแทน / max drawdown (ฟื้นจากหลุมได้แค่ไหน)
     params: dict = field(default_factory=dict)
 
     def summary(self) -> str:
@@ -38,6 +41,9 @@ class BacktestResult:
             f"  จำนวนการเทรด     : {self.trades}",
             f"  Max Drawdown     : {self.max_drawdown:.2f}%",
             f"  Sharpe (annual)  : {self.sharpe:.2f}",
+            f"  Sortino (annual) : {self.sortino:.2f}",
+            f"  Profit Factor    : {self.profit_factor:.2f}",
+            f"  Recovery Factor  : {self.recovery_factor:.2f}",
             "=" * 44,
         ]
         return "\n".join(lines)
@@ -135,6 +141,17 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     std = strat_ret.std()
     sharpe = (strat_ret.mean() / std * np.sqrt(bars)) if std > 0 else 0.0
 
+    # Sortino: ลงโทษเฉพาะความผันผวนขาลง (จาก quant paper Poudel & Paudel)
+    downside = strat_ret[strat_ret < 0]
+    dstd = downside.std()
+    sortino = (strat_ret.mean() / dstd * np.sqrt(bars)) if dstd > 0 else 0.0
+    # Profit Factor: กำไรรวม / ขาดทุนรวม
+    gains = strat_ret[strat_ret > 0].sum()
+    losses = strat_ret[strat_ret < 0].sum()
+    profit_factor = (gains / abs(losses)) if losses < 0 else 0.0
+    # Recovery Factor: ผลตอบแทน / max drawdown
+    recovery_factor = (total_return / abs(max_drawdown)) if max_drawdown < 0 else 0.0
+
     return BacktestResult(
         equity=equity,
         trades=trades,
@@ -142,6 +159,9 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
         buy_hold_return=buy_hold_return,
         max_drawdown=max_drawdown,
         sharpe=sharpe,
+        sortino=sortino,
+        profit_factor=profit_factor,
+        recovery_factor=recovery_factor,
         final_value=float(equity.iloc[-1]),
         initial_cash=initial,
         params=dict(cfg["strategy"]),

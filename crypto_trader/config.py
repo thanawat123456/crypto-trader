@@ -34,6 +34,8 @@ DEFAULTS = {
         "stoch_smooth": 3,
         "stoch_d": 3,
         "stoch_overbought": 80,
+        # tsmom (Time-Series Momentum — รวมหลาย lookback)
+        "tsmom_lookbacks": [20, 60, 120],
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
     "bot": {
@@ -41,14 +43,24 @@ DEFAULTS = {
         "trade_amount": 0.001,
         "summary_enabled": True,
         "enter_on_current_signal": True,
+        # ตะกร้าเหรียญที่บอทเทรด (ใช้สำหรับ momentum_filter จัดอันดับข้ามเหรียญ)
+        "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT"],
+    },
+    "momentum_filter": {
+        # ซื้อเฉพาะเหรียญที่ momentum แรงสุด top_k ในตะกร้า (จาก SSRN: เน้นตัวชนะไม่กี่ตัว)
+        "enabled": False,     # default OFF — เปิดแล้ว backtest/paper เทียบก่อน
+        "timeframe": "4h",
+        "lookback": 30,       # จำนวนแท่งย้อนหลังที่ใช้วัดผลตอบแทน
+        "top_k": 3,           # อนุญาตซื้อเฉพาะอันดับ 1..top_k
     },
     "paper": {
         "enabled": True,
         "initial_cash": 300,
         "allocation_pct": 0.2,
         "fee": 0.001,
-        "sizing_mode": "risk",       # "allocation" = ใช้ % ของเงินสด | "risk" = เสี่ยงคงที่ต่อไม้
+        "sizing_mode": "risk",       # "allocation" | "risk" (เสี่ยงคงที่/ไม้) | "volatility" (vol targeting)
         "risk_per_trade_pct": 0.01,  # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต
+        "target_vol": 0.40,          # โหมด volatility: เป้าความผันผวนต่อปี (จาก TSMOM literature 40%)
     },
     "market_filter": {
         "enabled": True,

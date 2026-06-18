@@ -31,15 +31,18 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         sp.add_argument("-l", "--limit", type=int, default=d["limit"])
         sp.add_argument(
             "--strategy",
-            choices=["ema_cross", "rsi", "macd", "bb_squeeze", "rsi2", "heikin_stoch"],
+            choices=["ema_cross", "rsi", "macd", "bb_squeeze", "rsi2", "heikin_stoch", "tsmom"],
             help="เลือกกลยุทธ์ทับค่าใน config",
         )
 
-    for name in ("fetch", "chart", "signal", "backtest", "optimize", "walkforward", "bot"):
+    for name in ("fetch", "chart", "signal", "backtest", "optimize",
+                 "walkforward", "montecarlo", "bot"):
         sp = sub.add_parser(name)
         common(sp)
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
+        if name == "montecarlo":
+            sp.add_argument("--runs", type=int, default=1000, help="จำนวนรอบจำลอง")
         if name in ("optimize", "walkforward"):
             sp.add_argument("--metric", choices=["total_return", "sharpe"],
                             default="total_return", help="จัดอันดับตามอะไร")
@@ -122,6 +125,14 @@ def main(argv=None) -> int:
         if not table.empty:
             print(table.to_string(index=False))
         print("\n" + summarize(table))
+
+    elif args.command == "montecarlo":
+        from .montecarlo import monte_carlo, summarize
+        ex = make_exchange(cfg)
+        df = fetch_ohlcv(ex, args.symbol, args.timeframe, args.limit)
+        print(f"\n🎲 Monte Carlo | {args.symbol} {args.timeframe} | กลยุทธ์={cfg['strategy']['name']}")
+        stats = monte_carlo(df, cfg, args.timeframe, runs=args.runs)
+        print("\n" + summarize(stats))
 
     elif args.command == "bot":
         from .bot import run_bot

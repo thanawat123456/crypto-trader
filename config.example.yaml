@@ -37,6 +37,7 @@ strategy:
   stoch_smooth: 3
   stoch_d: 3
   stoch_overbought: 80
+  tsmom_lookbacks: [20, 60, 120]  # (tsmom) Time-Series Momentum — รวมหลาย lookback โหวต
 
 backtest:
   initial_cash: 10000    # USDT
@@ -48,14 +49,27 @@ bot:
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
   summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
   enter_on_current_signal: true # DRY-RUN: ถ้ากลยุทธ์บอกว่าควรถืออยู่แล้ว ให้จำลอง BUY ได้
+  symbols:               # ตะกร้าเหรียญที่เทรด (ใช้จัดอันดับใน momentum_filter)
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+    - XRP/USDT
+    - ADA/USDT
+
+momentum_filter:         # ซื้อเฉพาะเหรียญ momentum แรงสุดในตะกร้า (จาก SSRN/Momentum research)
+  enabled: false         # default OFF — เปิดแล้ว backtest/paper เทียบก่อนใช้จริง
+  timeframe: 4h
+  lookback: 30           # วัดผลตอบแทนย้อนหลังกี่แท่ง
+  top_k: 3               # อนุญาตซื้อเฉพาะอันดับ 1-3 ที่แรงสุด
 
 paper:
   enabled: true           # จำลองพอร์ตใน DRY-RUN โดยไม่ส่ง order จริง
   initial_cash: 300       # ทุนจำลองเริ่มต้น (USDT)
   allocation_pct: 0.2     # โหมด allocation: ใช้เงินสดสูงสุด 20% ต่อไม้
   fee: 0.001              # fee จำลอง 0.1%
-  sizing_mode: risk       # allocation = ใช้ % เงินสด | risk = เสี่ยงคงที่ต่อไม้ (แนะนำ)
+  sizing_mode: risk       # allocation | risk (เสี่ยงคงที่/ไม้ แนะนำ) | volatility (vol targeting)
   risk_per_trade_pct: 0.01 # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต (ขนาดไม้ปรับตามระยะ stop)
+  target_vol: 0.40         # โหมด volatility: เป้าผันผวนต่อปี (จาก TSMOM literature ~40%)
 
 market_filter:
   enabled: true           # เปิด BUY เฉพาะตอน BTC 4h อยู่เหนือ EMA200
