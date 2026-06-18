@@ -35,10 +35,14 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
             help="เลือกกลยุทธ์ทับค่าใน config",
         )
 
-    for name in ("fetch", "chart", "signal", "backtest", "optimize",
-                 "walkforward", "montecarlo", "report", "validate", "scan", "status", "bot"):
+    for name in ("fetch", "chart", "signal", "backtest", "optimize", "walkforward",
+                 "montecarlo", "pbo", "report", "validate", "scan", "status", "bot"):
         sp = sub.add_parser(name)
         common(sp)
+        if name == "pbo":
+            sp.add_argument("--mode", choices=["strategies", "ema"], default="strategies",
+                            help="เทียบทุกกลยุทธ์ (strategies) หรือ grid ของ ema_cross (ema)")
+            sp.add_argument("--blocks", type=int, default=12, help="จำนวนบล็อก S (คู่)")
         if name == "status":
             sp.add_argument("--notify", action="store_true", help="ส่งผลเข้า Discord ด้วย")
             sp.add_argument("--every-hours", type=float, default=0,
@@ -198,6 +202,16 @@ def main(argv=None) -> int:
         if args.every_hours > 0:
             from . import state
             state.set_marker("scan")
+
+    elif args.command == "pbo":
+        from .pbo import build_matrix, cscv_pbo, summarize
+        ex = make_exchange(cfg)
+        df = fetch_ohlcv(ex, args.symbol, args.timeframe, args.limit)
+        print(f"\n🔬 PBO/CSCV | {args.symbol} {args.timeframe} | mode={args.mode}")
+        matrix, labels = build_matrix(df, cfg, args.timeframe, mode=args.mode)
+        stats = cscv_pbo(matrix, blocks=args.blocks)
+        print("\n" + summarize(stats, labels, args.timeframe))
+        print("⚠️  read-only — ไม่กระทบการเทรด")
 
     elif args.command == "status":
         from datetime import datetime, timezone
