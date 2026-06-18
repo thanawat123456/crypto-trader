@@ -244,8 +244,8 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         amount=position_state["amount"],
     )
 
-    alerts.notify(
-        cfg,
+    # "เริ่มบอท" ลง console/log เท่านั้น — กัน Discord รก (เด้งเฉพาะ BUY/SELL/ข้ามไม้)
+    alerts._console(
         f"🤖 เริ่มบอท [{mode}] | {symbol} {timeframe} | กลยุทธ์={cfg['strategy']['name']} "
         f"(fast={cfg['strategy']['fast']}/slow={cfg['strategy']['slow']}) | "
         f"{size_text} | สถานะเริ่ม: {'ถืออยู่' if position_state['in_position'] else 'ถือเงินสด'}",
@@ -267,7 +267,8 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
                     position_state.get("last_price"),
                     portfolio,
                 )
-                alerts.notify(cfg, summary)
+                # สรุปลง console/log เท่านั้น — ไม่ส่ง Discord ทุกรอบ (รบกวน)
+                alerts._console(summary)
             fails = 0  # สำเร็จ → รีเซ็ตตัวนับ
         except Exception as e:  # noqa: BLE001
             fails += 1
