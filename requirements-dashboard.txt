@@ -1,0 +1,3 @@
+# dependencies เฉพาะ dashboard (รันบน Mac เท่านั้น — VM ไม่ต้องลง)
+streamlit>=1.30
+plotly>=5.18

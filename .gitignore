@@ -16,3 +16,4 @@ id_rsa*
 # retry-launch.sh มี OCID ส่วนตัว — ไม่ commit ขึ้น repo สาธารณะ
 retry-launch.sh
 retry-launch-arm.sh
+dashboard_data/
