@@ -70,6 +70,14 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     trailing = float(risk.get("trailing_stop_pct", 0.0) or 0.0)
     breakeven = float(risk.get("breakeven_trigger_pct", 0.0) or 0.0)
 
+    # partial take-profit + time stop (Waverly)
+    partial_on = bool(risk.get("partial_tp_enabled", False))
+    pt_levels = list(risk.get("partial_tp_levels", [1.0, 2.0]))
+    pt_frac = float(risk.get("partial_tp_fraction", 0.33))
+    max_hold_hours = float(risk.get("max_hold_hours", 0) or 0)
+    hours_per_bar = 8760.0 / _BARS_PER_YEAR.get(timeframe, 8760)
+    max_hold_bars = (max_hold_hours / hours_per_bar) if max_hold_hours > 0 else 0
+
     # ATR-based stops: เตรียมระยะ SL/TP รายแท่งตามความผันผวนจริง
     atr_enabled = bool(risk.get("atr_stops_enabled", False))
     atr_pct = None
@@ -87,39 +95,63 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     held = 0.0
     entry_price = None
     peak_price = None
+    entry_bar = None
+    entry_r = None
+    held_cap = position_size   # เพดาน held ของ position ปัจจุบัน (ลดลงเมื่อ scale out)
+    scale_level = 0
     trades = 0
 
     for i, (_, price) in enumerate(closes.items()):
         asset_ret = 0.0 if i == 0 else float(price / closes.iloc[i - 1] - 1)
         strat_ret = asset_ret * held
 
-        target = position_size if signal_position.iloc[i] == 1 else 0.0
+        if held == 0:  # flat → รีเซ็ตเพดาน/ขั้น scale
+            held_cap = position_size
+            scale_level = 0
+            entry_bar = None
+
+        # ระยะ SL/TP รายแท่ง (ATR หรือ % ตายตัว); ปิด full TP ถ้าใช้ partial
+        if atr_enabled and float(atr_pct.iloc[i]) > 0:
+            sl_dist = atr_sl_mult * float(atr_pct.iloc[i])
+            tp_dist = atr_tp_mult * float(atr_pct.iloc[i])
+        else:
+            sl_dist, tp_dist = stop_loss, take_profit
+        if partial_on:
+            tp_dist = 0.0
+
+        signal_target = position_size if signal_position.iloc[i] == 1 else 0.0
+        target = signal_target
         if held > 0 and entry_price:
             move = float(price / entry_price - 1)
             peak_price = max(peak_price or entry_price, float(price))
-            # ระยะ SL/TP — ปรับตาม ATR ถ้าเปิดใช้ ไม่งั้น % ตายตัว
-            if atr_enabled and float(atr_pct.iloc[i]) > 0:
-                sl_dist = atr_sl_mult * float(atr_pct.iloc[i])
-                tp_dist = atr_tp_mult * float(atr_pct.iloc[i])
-            else:
-                sl_dist, tp_dist = stop_loss, take_profit
             hit_sl = sl_dist and move <= -sl_dist
             hit_tp = tp_dist and move >= tp_dist
             hit_trail = trailing and price <= peak_price * (1 - trailing)
-            hit_be = (
-                breakeven
-                and peak_price >= entry_price * (1 + breakeven)
-                and price <= entry_price
-            )
-            if hit_sl or hit_tp or hit_trail or hit_be:
+            hit_be = breakeven and peak_price >= entry_price * (1 + breakeven) and price <= entry_price
+            hit_time = max_hold_bars and entry_bar is not None and (i - entry_bar) >= max_hold_bars
+            if hit_sl or hit_tp or hit_trail or hit_be or hit_time:
                 target = 0.0
+            else:
+                # partial scale-out: ลดเพดานเมื่อราคาถึง R-multiple ขั้นถัดไป
+                if partial_on and entry_r and entry_r > 0 and scale_level < len(pt_levels):
+                    tgt_price = entry_price * (1 + entry_r * float(pt_levels[scale_level]))
+                    if price >= tgt_price:
+                        held_cap = max(held_cap - pt_frac * position_size, 0.0)
+                        scale_level += 1
+                target = min(signal_target, held_cap)
 
         turnover = abs(target - held)
         if turnover > 0:
             trades += 1
             strat_ret -= turnover * fee
-            entry_price = float(price) if target > 0 else None
-            peak_price = float(price) if target > 0 else None
+            if held == 0 and target > 0:        # เข้าไม้ใหม่
+                entry_price = float(price)
+                peak_price = float(price)
+                entry_bar = i
+                entry_r = sl_dist
+            elif target == 0:                   # ออกหมด
+                entry_price = None
+                peak_price = None
 
         current_equity *= 1 + strat_ret
         equity_values.append(current_equity)

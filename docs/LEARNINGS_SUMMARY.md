@@ -131,8 +131,8 @@ dynamic position sizing by risk, trade limits, cooldown → เน้น capital
 | Walk-forward (กัน overfit) | (best practice) | ✅ `walkforward` command |
 | Relative momentum (ซื้อตัวแข็งสุด) | SSRN, Momentum book | ✅ `momentum_filter` (default OFF) |
 | กลยุทธ์ rsi2/bb_squeeze/heikin_stoch | HumbleTraders | ✅ เพิ่มแล้ว (rsi2 = default) |
-| Partial take-profit (scale out 1R/2R) | Waverly | ⏸️ ยังไม่ทำ |
-| Time stop | Waverly | ⏸️ ยังไม่ทำ |
+| Partial take-profit (scale out 1R/2R) | Waverly | ✅ `partial_tp_enabled` (default OFF) |
+| Time stop | Waverly | ✅ `max_hold_hours` (default OFF) |
 | Time-series momentum (tsmom) | Levy, Martin, MomTransformer | ✅ strategy `tsmom` |
 | Volatility targeting sizing | Levy, MomTransformer | ✅ `sizing_mode=volatility` |
 | Deep-learning momentum (Transformer) | MomTransformer | ❌ ไม่ทำ (infra ไม่ไหว) |

@@ -93,6 +93,11 @@ DEFAULTS = {
         "max_concurrent_positions": 3,    # 0 = ไม่จำกัด; เช่น 3 = ถือพร้อมกันสูงสุด 3 เหรียญ
         "breakeven_trigger_pct": 0.02,    # 0 = ปิด; พอกำไรถึง +2% เลื่อน SL มาที่ราคาเข้า (ไม้ไม่ขาดทุน)
         "circuit_breaker_pct": 0.15,      # 0 = ปิด; ถ้าพอร์ตขาดทุนสะสมเกิน 15% หยุดเปิดไม้ใหม่ + แจ้งเตือน
+        # partial take-profit (Waverly scale-out): ขายบางส่วนที่ R-multiple แล้วถือที่เหลือวิ่งต่อ
+        "partial_tp_enabled": False,      # default OFF — เปิดแล้ว backtest เทียบก่อน
+        "partial_tp_levels": [1.0, 2.0],  # ขายที่กำไร = 1R, 2R (R = ระยะ stop ตอนเข้า)
+        "partial_tp_fraction": 0.33,      # ขายกี่ % ของปริมาณเดิมในแต่ละขั้น
+        "max_hold_hours": 0,              # time stop: 0 = ปิด; เช่น 168 = ออกถ้าถือเกิน 7 วัน
         "journal_path": "trade_journal.csv",
     },
     "alerts": {

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 
 from . import alerts, state
 from .backtest import _BARS_PER_YEAR
@@ -24,12 +25,35 @@ from .strategy import get_position, latest_signal
 MAX_BACKOFF = 600  # หน่วงสูงสุด 10 นาทีเมื่อ error ติดกัน
 
 
+def _hours_held(position_state: dict) -> float:
+    """กี่ชั่วโมงตั้งแต่เข้าไม้ (สำหรับ time stop) — 0 ถ้าไม่รู้เวลาเข้า"""
+    entry_time = position_state.get("entry_time")
+    if not entry_time:
+        return 0.0
+    try:
+        entered = datetime.fromisoformat(entry_time)
+    except (TypeError, ValueError):
+        return 0.0
+    return (datetime.now(timezone.utc) - entered).total_seconds() / 3600.0
+
+
 def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool):
     if dry_run:
         return {"info": "dry-run (ไม่ส่งคำสั่งจริง)"}
     if side == "buy":
         return exchange.create_market_buy_order(symbol, amount)
     return exchange.create_market_sell_order(symbol, amount)
+
+
+def _paper_settle_sell(cfg: dict, portfolio: dict, entry_price, qty: float, price: float) -> float:
+    """คำนวณ PnL + อัปเดตพอร์ตจำลองเมื่อขาย qty (ใช้ทั้งขายเต็มและ partial TP)"""
+    fee = float(cfg.get("paper", {}).get("fee", 0.001))
+    entry_cost = float(entry_price or price) * qty
+    exit_value = price * qty
+    pnl = exit_value * (1 - fee) - entry_cost * (1 + fee)
+    portfolio["cash"] = float(portfolio.get("cash", 0.0)) + exit_value * (1 - fee)
+    portfolio["realized_pnl"] = float(portfolio.get("realized_pnl", 0.0)) + pnl
+    return pnl
 
 
 def _paper_buy_amount(
@@ -203,6 +227,12 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         if vol > 0:
             realized_vol = vol * (_BARS_PER_YEAR.get(timeframe, 8760) ** 0.5)
 
+    # ถ้าเปิด partial take-profit → ปิด full TP (ปล่อยให้ partial + trailing จัดการกำไรแทน)
+    partial_on = bool(risk.get("partial_tp_enabled", False))
+    if partial_on:
+        tp_dist = 0.0
+    max_hold_hours = float(risk.get("max_hold_hours", 0) or 0)
+
     exit_reason = None
     peak_price = position_state.get("peak_price")
     if in_position and entry_price:
@@ -222,6 +252,9 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         ):
             # เคยกำไรถึงจุด trigger แล้วราคาย้อนกลับมาที่ทุน → ออกเสมอตัว
             exit_reason = "breakeven"
+        elif max_hold_hours > 0 and _hours_held(position_state) >= max_hold_hours:
+            # time stop: ถือนานเกินกำหนดแล้วไม่ไปไหน → ปล่อยทุนไปหาโอกาสอื่น
+            exit_reason = "time_stop"
 
     buy_reason = None
     if signal == "BUY" and not in_position:
@@ -300,8 +333,16 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             fee = float(cfg.get("paper", {}).get("fee", 0.001))
             portfolio["cash"] = float(portfolio.get("cash", 0.0)) - (buy_amount * price * (1 + fee))
             state.save_portfolio(portfolio)
-        position_state = {"in_position": True, "entry_price": price, "amount": buy_amount, "peak_price": price}
-        state.save_state(symbol, timeframe, True, entry_price=price, amount=buy_amount, peak_price=price)
+        entry_time = datetime.now(timezone.utc).isoformat()
+        position_state = {
+            "in_position": True, "entry_price": price, "amount": buy_amount,
+            "peak_price": price, "entry_time": entry_time, "entry_r": sl_dist,
+            "init_amount": buy_amount, "scale_level": 0,
+        }
+        state.save_state(
+            symbol, timeframe, True, entry_price=price, amount=buy_amount, peak_price=price,
+            entry_time=entry_time, entry_r=sl_dist, init_amount=buy_amount, scale_level=0,
+        )
         record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, buy_reason)
         msg = alerts.signal_message(symbol, timeframe, "BUY", price)
         alerts.notify(cfg, f"{msg} | reason={buy_reason}")
@@ -309,21 +350,49 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         reason = exit_reason or "signal"
         sell_amount = float(saved_amount)
         _place_order(exchange, symbol, "sell", sell_amount, dry_run)
-        gross_pnl = (price - float(entry_price or price)) * sell_amount
-        pnl = gross_pnl
+        pnl = (price - float(entry_price or price)) * sell_amount
         if dry_run and cfg.get("paper", {}).get("enabled", True):
-            fee = float(cfg.get("paper", {}).get("fee", 0.001))
-            entry_cost = float(entry_price or price) * sell_amount
-            exit_value = price * sell_amount
-            pnl = exit_value * (1 - fee) - entry_cost * (1 + fee)
-            portfolio["cash"] = float(portfolio.get("cash", 0.0)) + exit_value * (1 - fee)
-            portfolio["realized_pnl"] = float(portfolio.get("realized_pnl", 0.0)) + pnl
+            pnl = _paper_settle_sell(cfg, portfolio, entry_price, sell_amount, price)
             state.save_portfolio(portfolio)
-        position_state = {"in_position": False, "entry_price": None, "amount": None, "peak_price": None}
-        state.save_state(symbol, timeframe, False, entry_price=None, amount=None, peak_price=None)
+        position_state = {"in_position": False, "entry_price": None, "amount": None, "peak_price": None,
+                          "entry_time": None, "entry_r": None, "init_amount": None, "scale_level": 0}
+        state.save_state(symbol, timeframe, False, entry_price=None, amount=None, peak_price=None,
+                         entry_time=None, entry_r=None, init_amount=None, scale_level=0)
         record_trade(journal_path, symbol, timeframe, "SELL", price, sell_amount, reason, pnl)
         msg = alerts.signal_message(symbol, timeframe, "SELL", price)
         alerts.notify(cfg, f"{msg} | reason={reason} | PnL≈{pnl:,.2f}")
+    elif (
+        in_position and partial_on and entry_price
+        and float(position_state.get("entry_r") or 0) > 0
+        and int(position_state.get("scale_level", 0) or 0) < len(risk.get("partial_tp_levels", []))
+        and price >= float(entry_price) * (1 + float(position_state["entry_r"])
+                                           * float(risk["partial_tp_levels"][int(position_state.get("scale_level", 0) or 0)]))
+    ):
+        # Partial take-profit: ราคาถึง R-multiple ขั้นถัดไป → ขายบางส่วน ถือที่เหลือวิ่งต่อ
+        level = int(position_state.get("scale_level", 0) or 0)
+        mult = float(risk["partial_tp_levels"][level])
+        init_amt = float(position_state.get("init_amount") or saved_amount)
+        frac = float(risk.get("partial_tp_fraction", 0.33))
+        qty = min(init_amt * frac, float(saved_amount))
+        _place_order(exchange, symbol, "sell", qty, dry_run)
+        pnl = (price - float(entry_price)) * qty
+        if dry_run and cfg.get("paper", {}).get("enabled", True):
+            pnl = _paper_settle_sell(cfg, portfolio, entry_price, qty, price)
+            state.save_portfolio(portfolio)
+        remaining = float(saved_amount) - qty
+        record_trade(journal_path, symbol, timeframe, "SELL", price, qty, f"partial_tp_{mult}R", pnl)
+        alerts.notify(cfg, f"💰 Partial TP {mult}R | {symbol} @ {price:,.2f} | ขาย {qty:.6f} | PnL≈{pnl:,.2f}")
+        if remaining <= 1e-9:
+            position_state = {"in_position": False, "entry_price": None, "amount": None, "peak_price": None,
+                              "entry_time": None, "entry_r": None, "init_amount": None, "scale_level": 0}
+            state.save_state(symbol, timeframe, False, entry_price=None, amount=None, peak_price=None,
+                             entry_time=None, entry_r=None, init_amount=None, scale_level=0)
+        else:
+            position_state["amount"] = remaining
+            position_state["scale_level"] = level + 1
+            position_state["peak_price"] = peak_price
+            state.save_state(symbol, timeframe, True, amount=remaining,
+                             scale_level=level + 1, peak_price=peak_price)
     else:
         where = "ถืออยู่" if in_position else "ถือเงินสด"
         alerts._console(f"… ไม่มีสัญญาณใหม่ ({where}) | {symbol} @ {price:,.2f}")
@@ -355,11 +424,11 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         state.save_portfolio(portfolio)
     size_text = f"เทรดครั้งละ {amount}"
     if dry_run and paper_cfg.get("enabled", True):
-        mode = paper_cfg.get("sizing_mode")
+        smode = paper_cfg.get("sizing_mode")
         cash_txt = f"cash≈{portfolio['cash']:,.2f}"
-        if mode == "risk":
+        if smode == "risk":
             size_text = f"paper risk={float(paper_cfg.get('risk_per_trade_pct', 0.01)) * 100:.1f}%/ไม้ | {cash_txt}"
-        elif mode == "volatility":
+        elif smode == "volatility":
             size_text = f"paper vol-target={float(paper_cfg.get('target_vol', 0.4)) * 100:.0f}% | {cash_txt}"
         else:
             size_text = f"paper allocation={float(paper_cfg.get('allocation_pct', 0.2)) * 100:.0f}% | {cash_txt}"
@@ -371,6 +440,10 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         "entry_price": saved.get("entry_price"),
         "amount": saved.get("amount"),
         "peak_price": saved.get("peak_price"),
+        "entry_time": saved.get("entry_time"),
+        "entry_r": saved.get("entry_r"),
+        "init_amount": saved.get("init_amount"),
+        "scale_level": saved.get("scale_level", 0),
     }
     # เขียนไฟล์ state ทันที เพื่อให้มีไฟล์เสมอ (สำคัญสำหรับ GitHub Actions ที่ต้อง commit)
     state.save_state(

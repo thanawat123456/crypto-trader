@@ -17,23 +17,26 @@ def _key(symbol: str, timeframe: str) -> str:
     return f"{symbol}|{timeframe}"
 
 
+# ฟิลด์เริ่มต้นของสถานะหนึ่ง position (เพิ่มได้เรื่อย ๆ โดยไม่พังของเก่า)
+_STATE_DEFAULTS = {
+    "in_position": False,
+    "updated_at": None,
+    "entry_price": None,
+    "amount": None,
+    "peak_price": None,
+    "entry_time": None,    # เวลาเข้าไม้ (ISO) — สำหรับ time stop
+    "entry_r": None,       # ระยะ stop ตอนเข้า (R) — สำหรับ partial take-profit
+    "init_amount": None,   # ปริมาณตอนเข้าเต็ม — ฐานคำนวณ scale-out
+    "scale_level": 0,      # ทำ partial TP ไปแล้วกี่ขั้น
+}
+
+
 def load_state(symbol: str, timeframe: str, path: str = DEFAULT_PATH) -> dict:
-    """อ่านสถานะของคู่ symbol+timeframe (คืน default ถ้ายังไม่มี)"""
-    if not os.path.exists(path):
-        return {"in_position": False, "updated_at": None, "entry_price": None, "amount": None}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            all_state = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {"in_position": False, "updated_at": None, "entry_price": None, "amount": None}
-    saved = all_state.get(_key(symbol, timeframe), {})
-    return {
-        "in_position": bool(saved.get("in_position", False)),
-        "updated_at": saved.get("updated_at"),
-        "entry_price": saved.get("entry_price"),
-        "amount": saved.get("amount"),
-        "peak_price": saved.get("peak_price"),
-    }
+    """อ่านสถานะของคู่ symbol+timeframe (เติม default ให้ครบ ถ้ายังไม่มี)"""
+    saved = _load_all(path).get(_key(symbol, timeframe), {})
+    state = {**_STATE_DEFAULTS, **saved}
+    state["in_position"] = bool(state.get("in_position", False))
+    return state
 
 
 def save_state(
@@ -41,26 +44,15 @@ def save_state(
     timeframe: str,
     in_position: bool,
     path: str = DEFAULT_PATH,
-    entry_price: float | None = None,
-    amount: float | None = None,
-    peak_price: float | None = None,
+    **fields,
 ) -> None:
-    """บันทึกสถานะแบบ atomic (เขียนไฟล์ temp แล้ว replace กันไฟล์พังถ้าดับกลางคัน)"""
-    all_state = {}
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                all_state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            all_state = {}
-
-    all_state[_key(symbol, timeframe)] = {
-        "in_position": in_position,
-        "entry_price": entry_price,
-        "amount": amount,
-        "peak_price": peak_price,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    """บันทึกสถานะแบบ atomic + merge (เก็บฟิลด์เดิมที่ไม่ได้ส่งมาไว้ → กันลืม state ข้ามรอบ)"""
+    all_state = _load_all(path)
+    record = all_state.get(_key(symbol, timeframe), {})
+    record.update(fields)
+    record["in_position"] = in_position
+    record["updated_at"] = datetime.now(timezone.utc).isoformat()
+    all_state[_key(symbol, timeframe)] = record
 
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
