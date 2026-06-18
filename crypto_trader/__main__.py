@@ -36,9 +36,13 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         )
 
     for name in ("fetch", "chart", "signal", "backtest", "optimize",
-                 "walkforward", "montecarlo", "report", "validate", "scan", "bot"):
+                 "walkforward", "montecarlo", "report", "validate", "scan", "status", "bot"):
         sp = sub.add_parser(name)
         common(sp)
+        if name == "status":
+            sp.add_argument("--notify", action="store_true", help="ส่งผลเข้า Discord ด้วย")
+            sp.add_argument("--every-hours", type=float, default=0,
+                            help="ทำเฉพาะถ้าผ่านมาแล้ว N ชม.ตั้งแต่ครั้งก่อน (0 = ทำทันที)")
         if name == "scan":
             sp.add_argument("--quote", default="USD", help="เหรียญฝั่ง quote (Kraken=USD)")
             sp.add_argument("--top-volume", type=int, default=30, help="กรองเอา N เหรียญ volume สูงสุด")
@@ -194,6 +198,26 @@ def main(argv=None) -> int:
         if args.every_hours > 0:
             from . import state
             state.set_marker("scan")
+
+    elif args.command == "status":
+        from datetime import datetime, timezone
+
+        from . import alerts, state
+        from .status import build_status
+        if args.every_hours > 0:
+            last = state.get_marker("status")
+            if last:
+                elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
+                if elapsed < args.every_hours:
+                    print(f"ยังไม่ถึงรอบ status (ผ่าน {elapsed:.1f}/{args.every_hours:.0f} ชม.)")
+                    return 0
+        ex = make_exchange(cfg)
+        msg = build_status(ex, cfg, args.timeframe)
+        print(msg)
+        if args.notify:
+            alerts.notify(cfg, msg)
+        if args.every_hours > 0:
+            state.set_marker("status")
 
     elif args.command == "validate":
         from datetime import datetime, timezone
