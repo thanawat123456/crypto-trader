@@ -8,7 +8,7 @@ import yaml
 
 DEFAULTS = {
     "exchange": {"name": "binance", "api_key": "", "api_secret": "", "sandbox": True},
-    "defaults": {"symbol": "BTC/USDT", "timeframe": "1h", "limit": 500},
+    "defaults": {"symbol": "BTC/USD", "timeframe": "1h", "limit": 500},
     "strategy": {
         "name": "rsi2",       # จาก backtest 5 เหรียญ: rsi2 ชนะ ema_cross ทุกตัว + drawdown ต่ำกว่ามาก
         "fast": 19,           # (ema_cross) จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
@@ -43,8 +43,8 @@ DEFAULTS = {
         "trade_amount": 0.001,
         "summary_enabled": True,
         "enter_on_current_signal": True,
-        # ตะกร้าเหรียญที่บอทเทรด (ใช้สำหรับ momentum_filter จัดอันดับข้ามเหรียญ)
-        "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT"],
+        # ตะกร้าเหรียญที่บอทเทรด (Kraken /USD — สภาพคล่องดีกว่า /USDT มาก)
+        "symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD"],
     },
     "momentum_filter": {
         # ซื้อเฉพาะเหรียญที่ momentum แรงสุด top_k ในตะกร้า (จาก SSRN: เน้นตัวชนะไม่กี่ตัว)
@@ -64,7 +64,7 @@ DEFAULTS = {
     },
     "market_filter": {
         "enabled": True,
-        "symbol": "BTC/USDT",
+        "symbol": "BTC/USD",
         "timeframe": "4h",
         "ema_period": 200,
     },

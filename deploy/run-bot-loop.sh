@@ -10,7 +10,7 @@ RUN_ONCE="${RUN_ONCE:-false}"
 REPORT_EVERY_HOURS="${REPORT_EVERY_HOURS:-24}"   # ส่งสรุปผลเข้า Discord ทุกกี่ชม. (0 = ปิด)
 VALIDATE_EVERY_HOURS="${VALIDATE_EVERY_HOURS:-168}"  # ตรวจสุขภาพกลยุทธ์ทุกกี่ชม. (168=สัปดาห์, 0 = ปิด)
 
-SYMBOLS=("BTC/USDT" "ETH/USDT" "SOL/USDT" "XRP/USDT" "ADA/USDT")
+SYMBOLS=("BTC/USD" "ETH/USD" "SOL/USD" "XRP/USD" "ADA/USD")
 
 cd "$APP_DIR"
 

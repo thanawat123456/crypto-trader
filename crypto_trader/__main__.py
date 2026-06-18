@@ -36,9 +36,17 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         )
 
     for name in ("fetch", "chart", "signal", "backtest", "optimize",
-                 "walkforward", "montecarlo", "report", "validate", "bot"):
+                 "walkforward", "montecarlo", "report", "validate", "scan", "bot"):
         sp = sub.add_parser(name)
         common(sp)
+        if name == "scan":
+            sp.add_argument("--quote", default="USD", help="เหรียญฝั่ง quote (Kraken=USD)")
+            sp.add_argument("--top-volume", type=int, default=30, help="กรองเอา N เหรียญ volume สูงสุด")
+            sp.add_argument("--top-momentum", type=int, default=5, help="โชว์ N เหรียญ momentum แรงสุด")
+            sp.add_argument("--lookback", type=int, default=30, help="วัด momentum ย้อนหลังกี่แท่ง")
+            sp.add_argument("--min-volume", type=float, default=500_000,
+                            help="volume 24h ขั้นต่ำ (quote) — กันเหรียญสภาพคล่องต่ำ/ปั่น")
+            sp.add_argument("--notify", action="store_true", help="ส่งผลเข้า Discord ด้วย")
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
         if name == "montecarlo":
@@ -157,6 +165,20 @@ def main(argv=None) -> int:
         alerts.notify(cfg, build_report(journal_path, portfolio, initial))
         if args.every_hours > 0:
             state.set_marker("report")
+
+    elif args.command == "scan":
+        from .scanner import format_scan, scan_market
+        ex = make_exchange(cfg)
+        rows, n_liquid = scan_market(
+            ex, quote=args.quote, top_by_volume=args.top_volume,
+            top_by_momentum=args.top_momentum, timeframe=args.timeframe,
+            lookback=args.lookback, min_volume=args.min_volume,
+        )
+        msg = format_scan(rows, n_liquid, args.timeframe, args.lookback)
+        print(msg)
+        if args.notify:
+            from . import alerts
+            alerts.notify(cfg, msg)
 
     elif args.command == "validate":
         from datetime import datetime, timezone

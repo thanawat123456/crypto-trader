@@ -8,7 +8,7 @@ exchange:
   sandbox: true          # true = paper trading (เงินปลอม), false = เงินจริง! ระวัง
 
 defaults:
-  symbol: BTC/USDT
+  symbol: BTC/USD        # Kraken: /USD universe ใหญ่+สภาพคล่องดีกว่า /USDT มาก
   timeframe: 1h          # 1m, 5m, 15m, 1h, 4h, 1d
   limit: 500             # จำนวนแท่งเทียนที่ดึง
 
@@ -49,12 +49,12 @@ bot:
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
   summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
   enter_on_current_signal: true # DRY-RUN: ถ้ากลยุทธ์บอกว่าควรถืออยู่แล้ว ให้จำลอง BUY ได้
-  symbols:               # ตะกร้าเหรียญที่เทรด (ใช้จัดอันดับใน momentum_filter)
-    - BTC/USDT
-    - ETH/USDT
-    - SOL/USDT
-    - XRP/USDT
-    - ADA/USDT
+  symbols:               # ตะกร้าเหรียญที่เทรด (Kraken /USD — สภาพคล่องดีกว่า /USDT)
+    - BTC/USD
+    - ETH/USD
+    - SOL/USD
+    - XRP/USD
+    - ADA/USD
 
 momentum_filter:         # ซื้อเฉพาะเหรียญ momentum แรงสุดในตะกร้า (จาก SSRN/Momentum research)
   enabled: false         # default OFF — เปิดแล้ว backtest/paper เทียบก่อนใช้จริง
@@ -73,7 +73,7 @@ paper:
 
 market_filter:
   enabled: true           # เปิด BUY เฉพาะตอน BTC 4h อยู่เหนือ EMA200
-  symbol: BTC/USDT
+  symbol: BTC/USD
   timeframe: 4h
   ema_period: 200
 
