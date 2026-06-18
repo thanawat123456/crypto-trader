@@ -36,16 +36,18 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         )
 
     for name in ("fetch", "chart", "signal", "backtest", "optimize",
-                 "walkforward", "montecarlo", "report", "bot"):
+                 "walkforward", "montecarlo", "report", "validate", "bot"):
         sp = sub.add_parser(name)
         common(sp)
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
         if name == "montecarlo":
             sp.add_argument("--runs", type=int, default=1000, help="จำนวนรอบจำลอง")
-        if name == "report":
+        if name in ("report", "validate"):
             sp.add_argument("--every-hours", type=float, default=0,
-                            help="ส่งเฉพาะถ้าผ่านมาแล้ว N ชม.ตั้งแต่ครั้งก่อน (0 = ส่งทันที)")
+                            help="ทำเฉพาะถ้าผ่านมาแล้ว N ชม.ตั้งแต่ครั้งก่อน (0 = ทำทันที)")
+        if name == "validate":
+            sp.add_argument("--mc-runs", type=int, default=500, help="จำนวนรอบ Monte Carlo")
         if name in ("optimize", "walkforward"):
             sp.add_argument("--metric", choices=["total_return", "sharpe"],
                             default="total_return", help="จัดอันดับตามอะไร")
@@ -155,6 +157,26 @@ def main(argv=None) -> int:
         alerts.notify(cfg, build_report(journal_path, portfolio, initial))
         if args.every_hours > 0:
             state.set_marker("report")
+
+    elif args.command == "validate":
+        from datetime import datetime, timezone
+
+        from . import alerts, state
+        from .validate import run_validation
+        if args.every_hours > 0:
+            last = state.get_marker("validate")
+            if last:
+                elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
+                if elapsed < args.every_hours:
+                    print(f"ยังไม่ถึงรอบ validate (ผ่าน {elapsed:.1f}/{args.every_hours:.0f} ชม.)")
+                    return 0
+        symbols = cfg.get("bot", {}).get("symbols") or [args.symbol]
+        ex = make_exchange(cfg)
+        msg, _degraded = run_validation(ex, cfg, symbols, args.timeframe,
+                                        limit=args.limit, mc_runs=args.mc_runs)
+        alerts.notify(cfg, msg)
+        if args.every_hours > 0:
+            state.set_marker("validate")
 
     elif args.command == "bot":
         from .bot import run_bot
