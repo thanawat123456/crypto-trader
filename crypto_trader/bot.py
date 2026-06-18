@@ -135,6 +135,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
     stop_loss = float(risk.get("stop_loss_pct", 0.0) or 0.0)
     take_profit = float(risk.get("take_profit_pct", 0.0) or 0.0)
     trailing = float(risk.get("trailing_stop_pct", 0.0) or 0.0)
+    breakeven = float(risk.get("breakeven_trigger_pct", 0.0) or 0.0)
     journal_path = risk.get("journal_path", "trade_journal.csv")
 
     df = fetch_ohlcv(exchange, symbol, timeframe, limit)
@@ -164,6 +165,13 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             exit_reason = "take_profit"
         elif trailing and price <= peak_price * (1 - trailing):
             exit_reason = "trailing_stop"
+        elif (
+            breakeven
+            and peak_price >= float(entry_price) * (1 + breakeven)
+            and price <= float(entry_price)
+        ):
+            # เคยกำไรถึงจุด trigger แล้วราคาย้อนกลับมาที่ทุน → ออกเสมอตัว
+            exit_reason = "breakeven"
 
     buy_reason = None
     if signal == "BUY" and not in_position:
@@ -177,6 +185,19 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         buy_reason = "current_signal"
 
     if buy_reason:
+        # Circuit breaker: พอร์ตขาดทุนสะสมหนักเกินกำหนด → หยุดเปิดไม้ใหม่ (ไม้เดิมยังบริหาร/ออกตามปกติ)
+        cb_pct = float(risk.get("circuit_breaker_pct", 0.0) or 0.0)
+        if cb_pct > 0 and dry_run and cfg.get("paper", {}).get("enabled", True):
+            initial = float(cfg.get("paper", {}).get("initial_cash", 300)) or 1.0
+            dd = float(portfolio.get("realized_pnl", 0.0)) / initial
+            if dd <= -cb_pct:
+                alerts.notify(
+                    cfg,
+                    f"🛑 Circuit breaker | {symbol} | หยุดเปิดไม้ใหม่ "
+                    f"(ขาดทุนสะสม {dd:+.1%} เกินเพดาน -{cb_pct:.0%})",
+                )
+                position_state["last_price"] = price
+                return position_state, portfolio
         allowed, market_reason = _market_allows_buy(exchange, cfg)
         if not allowed:
             alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {market_reason}")
@@ -327,6 +348,7 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
                 )
                 # สรุปลง console/log เท่านั้น — ไม่ส่ง Discord ทุกรอบ (รบกวน)
                 alerts._console(summary)
+            alerts.heartbeat(cfg)  # ping เฝ้าระวัง: ทำงานครบรอบแล้ว = ยังไม่ตาย
             fails = 0  # สำเร็จ → รีเซ็ตตัวนับ
         except Exception as e:  # noqa: BLE001
             fails += 1

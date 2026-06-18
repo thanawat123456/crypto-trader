@@ -49,6 +49,21 @@ def _discord(cfg: dict, message: str) -> None:
         _console(f"⚠️  ส่ง Discord ไม่สำเร็จ: {e}")
 
 
+def heartbeat(cfg: dict) -> None:
+    """ping URL เฝ้าระวัง (เช่น healthchecks.io) ทุกรอบที่บอททำงานสำเร็จ
+
+    ถ้าบอท/เซิร์ฟเวอร์ตาย → ping หาย → บริการภายนอกจะแจ้งเตือนให้เอง
+    (dead-man's switch — เชื่อถือได้กว่าให้บอทแจ้งว่าตัวเองตาย)
+    """
+    url = cfg.get("alerts", {}).get("heartbeat_url")
+    if not url:
+        return
+    try:
+        requests.get(url, timeout=10)
+    except Exception:  # noqa: BLE001
+        pass  # ping พลาดไม่ใช่เรื่องคอขาดบาดตาย ไม่ต้องรบกวน
+
+
 def notify(cfg: dict, message: str) -> None:
     """ส่งแจ้งเตือนทุกช่องทางที่เปิดใช้"""
     _console(message)

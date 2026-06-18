@@ -62,6 +62,7 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     stop_loss = float(risk.get("stop_loss_pct", 0.0) or 0.0)
     take_profit = float(risk.get("take_profit_pct", 0.0) or 0.0)
     trailing = float(risk.get("trailing_stop_pct", 0.0) or 0.0)
+    breakeven = float(risk.get("breakeven_trigger_pct", 0.0) or 0.0)
 
     # ATR-based stops: เตรียมระยะ SL/TP รายแท่งตามความผันผวนจริง
     atr_enabled = bool(risk.get("atr_stops_enabled", False))
@@ -99,7 +100,12 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
             hit_sl = sl_dist and move <= -sl_dist
             hit_tp = tp_dist and move >= tp_dist
             hit_trail = trailing and price <= peak_price * (1 - trailing)
-            if hit_sl or hit_tp or hit_trail:
+            hit_be = (
+                breakeven
+                and peak_price >= entry_price * (1 + breakeven)
+                and price <= entry_price
+            )
+            if hit_sl or hit_tp or hit_trail or hit_be:
                 target = 0.0
 
         turnover = abs(target - held)

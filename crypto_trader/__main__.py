@@ -35,15 +35,20 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
             help="เลือกกลยุทธ์ทับค่าใน config",
         )
 
-    for name in ("fetch", "chart", "signal", "backtest", "optimize", "bot"):
+    for name in ("fetch", "chart", "signal", "backtest", "optimize", "walkforward", "bot"):
         sp = sub.add_parser(name)
         common(sp)
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
-        if name == "optimize":
+        if name in ("optimize", "walkforward"):
             sp.add_argument("--metric", choices=["total_return", "sharpe"],
                             default="total_return", help="จัดอันดับตามอะไร")
+        if name == "optimize":
             sp.add_argument("--top", type=int, default=10, help="แสดงกี่อันดับ")
+        if name == "walkforward":
+            sp.add_argument("--train", type=int, default=300, help="จำนวนแท่งช่วง train")
+            sp.add_argument("--test", type=int, default=100, help="จำนวนแท่งช่วง test")
+            sp.add_argument("--step", type=int, default=100, help="เลื่อนหน้าต่างทีละกี่แท่ง")
     return parser
 
 
@@ -105,6 +110,18 @@ def main(argv=None) -> int:
         print(f"\n⭐ ดีที่สุด: fast={int(best['fast'])} slow={int(best['slow'])} "
               f"→ return={best['return_%']}% sharpe={best['sharpe']}")
         print("⚠️  ระวัง overfitting — ลองทดสอบกับช่วงเวลา/เหรียญอื่นก่อนใช้จริง")
+
+    elif args.command == "walkforward":
+        from .walkforward import summarize, walk_forward
+        ex = make_exchange(cfg)
+        df = fetch_ohlcv(ex, args.symbol, args.timeframe, args.limit)
+        print(f"\n🔬 Walk-forward | {args.symbol} {args.timeframe} "
+              f"| train={args.train} test={args.test} step={args.step}\n")
+        table = walk_forward(df, cfg, args.timeframe, train=args.train,
+                             test=args.test, step=args.step, metric=args.metric)
+        if not table.empty:
+            print(table.to_string(index=False))
+        print("\n" + summarize(table))
 
     elif args.command == "bot":
         from .bot import run_bot

@@ -63,11 +63,14 @@ DEFAULTS = {
         "atr_sl_mult": 3.0,               # SL = ราคาเข้า − 3×ATR
         "atr_tp_mult": 5.0,               # TP = ราคาเข้า + 5×ATR
         "max_concurrent_positions": 3,    # 0 = ไม่จำกัด; เช่น 3 = ถือพร้อมกันสูงสุด 3 เหรียญ
+        "breakeven_trigger_pct": 0.02,    # 0 = ปิด; พอกำไรถึง +2% เลื่อน SL มาที่ราคาเข้า (ไม้ไม่ขาดทุน)
+        "circuit_breaker_pct": 0.15,      # 0 = ปิด; ถ้าพอร์ตขาดทุนสะสมเกิน 15% หยุดเปิดไม้ใหม่ + แจ้งเตือน
         "journal_path": "trade_journal.csv",
     },
     "alerts": {
         "discord": {"enabled": False, "webhook_url": ""},
         "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
+        "heartbeat_url": "",  # ping ทุกรอบที่สำเร็จ (เช่น healthchecks.io) → ถ้าเงียบ = บอทตาย ให้บริการนอกแจ้งเตือน
     },
 }
 
@@ -118,4 +121,7 @@ def _apply_env(cfg: dict) -> dict:
         cfg["alerts"]["telegram"]["enabled"] = True
     if env.get("TELEGRAM_CHAT_ID"):
         cfg["alerts"]["telegram"]["chat_id"] = env["TELEGRAM_CHAT_ID"]
+
+    if env.get("HEARTBEAT_URL"):
+        cfg["alerts"]["heartbeat_url"] = env["HEARTBEAT_URL"]
     return cfg
