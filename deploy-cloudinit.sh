@@ -59,7 +59,8 @@ cat > /home/${APP_USER}/NEXT_STEPS.txt <<'NOTE'
 1) nano ~/crypto-trader/config.yaml   -> ใส่ Testnet api_key/api_secret, ตั้ง sandbox: true
 2) ทดสอบ: cd ~/crypto-trader && .venv/bin/python -m crypto_trader bot BTC/USDT -t 1h --once
 3) สตาร์ทรันค้าง 24/7: sudo systemctl start crypto-trader
-4) ดู log สด: journalctl -u crypto-trader -f
+4)  ssh -i ~/.ssh/id_rsa ubuntu@34.42.212.100
+5) ดู log สด: journalctl -u crypto-trader -f
 NOTE
 chown ${APP_USER}:${APP_USER} /home/${APP_USER}/NEXT_STEPS.txt
 

@@ -78,11 +78,26 @@ def count_open_positions(path: str = DEFAULT_PATH, exclude_key: str | None = Non
     """
     count = 0
     for key, val in _load_all(path).items():
-        if key == PORTFOLIO_KEY or key == exclude_key:
+        if key.startswith("__") or key == exclude_key:
             continue
         if isinstance(val, dict) and val.get("in_position"):
             count += 1
     return count
+
+
+def get_marker(name: str, path: str = DEFAULT_PATH) -> str | None:
+    """อ่าน timestamp ของ marker (เช่น 'report') — ใช้ throttle งานที่ทำเป็นรอบ ๆ"""
+    return _load_all(path).get(f"__marker_{name}__", {}).get("at")
+
+
+def set_marker(name: str, path: str = DEFAULT_PATH) -> None:
+    """ปั๊ก timestamp ปัจจุบันให้ marker"""
+    all_state = _load_all(path)
+    all_state[f"__marker_{name}__"] = {"at": datetime.now(timezone.utc).isoformat()}
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(all_state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
 
 
 def load_portfolio(initial_cash: float, path: str = DEFAULT_PATH) -> dict:

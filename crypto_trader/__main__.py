@@ -36,13 +36,16 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         )
 
     for name in ("fetch", "chart", "signal", "backtest", "optimize",
-                 "walkforward", "montecarlo", "bot"):
+                 "walkforward", "montecarlo", "report", "bot"):
         sp = sub.add_parser(name)
         common(sp)
         if name == "bot":
             sp.add_argument("--once", action="store_true", help="รันรอบเดียวแล้วหยุด")
         if name == "montecarlo":
             sp.add_argument("--runs", type=int, default=1000, help="จำนวนรอบจำลอง")
+        if name == "report":
+            sp.add_argument("--every-hours", type=float, default=0,
+                            help="ส่งเฉพาะถ้าผ่านมาแล้ว N ชม.ตั้งแต่ครั้งก่อน (0 = ส่งทันที)")
         if name in ("optimize", "walkforward"):
             sp.add_argument("--metric", choices=["total_return", "sharpe"],
                             default="total_return", help="จัดอันดับตามอะไร")
@@ -133,6 +136,25 @@ def main(argv=None) -> int:
         print(f"\n🎲 Monte Carlo | {args.symbol} {args.timeframe} | กลยุทธ์={cfg['strategy']['name']}")
         stats = monte_carlo(df, cfg, args.timeframe, runs=args.runs)
         print("\n" + summarize(stats))
+
+    elif args.command == "report":
+        from datetime import datetime, timezone
+
+        from . import alerts, state
+        from .report import build_report
+        initial = float(cfg.get("paper", {}).get("initial_cash", 300))
+        if args.every_hours > 0:
+            last = state.get_marker("report")
+            if last:
+                elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() / 3600
+                if elapsed < args.every_hours:
+                    print(f"ยังไม่ถึงรอบส่ง report (ผ่าน {elapsed:.1f}/{args.every_hours:.0f} ชม.)")
+                    return 0
+        portfolio = state.load_portfolio(initial)
+        journal_path = cfg.get("risk", {}).get("journal_path", "trade_journal.csv")
+        alerts.notify(cfg, build_report(journal_path, portfolio, initial))
+        if args.every_hours > 0:
+            state.set_marker("report")
 
     elif args.command == "bot":
         from .bot import run_bot
