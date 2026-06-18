@@ -49,3 +49,28 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     low_close = (df["low"] - df["close"].shift()).abs()
     true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     return true_range.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+
+
+def stochastic(df: pd.DataFrame, k_period: int = 14, k_smooth: int = 3, d_period: int = 3):
+    """Stochastic Oscillator — คืน (%K, %D) วัด momentum 0-100"""
+    low_min = df["low"].rolling(k_period, min_periods=k_period).min()
+    high_max = df["high"].rolling(k_period, min_periods=k_period).max()
+    rng = (high_max - low_min).replace(0, pd.NA)
+    raw_k = 100 * (df["close"] - low_min) / rng
+    k = raw_k.rolling(k_smooth, min_periods=k_smooth).mean()
+    d = k.rolling(d_period, min_periods=d_period).mean()
+    return k, d
+
+
+def heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
+    """แปลง OHLC เป็นแท่ง Heikin-Ashi (กรอง noise เห็นเทรนด์ชัดขึ้น)"""
+    ha = pd.DataFrame(index=df.index)
+    ha["close"] = (df["open"] + df["high"] + df["low"] + df["close"]) / 4
+    ha_open = [float(df["open"].iloc[0] + df["close"].iloc[0]) / 2]
+    closes = ha["close"].tolist()
+    for i in range(1, len(df)):
+        ha_open.append((ha_open[i - 1] + closes[i - 1]) / 2)
+    ha["open"] = ha_open
+    ha["high"] = pd.concat([df["high"], ha["open"], ha["close"]], axis=1).max(axis=1)
+    ha["low"] = pd.concat([df["low"], ha["open"], ha["close"]], axis=1).min(axis=1)
+    return ha

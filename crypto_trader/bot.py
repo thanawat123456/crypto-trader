@@ -323,10 +323,21 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         peak_price=position_state["peak_price"],
     )
 
+    # พารามิเตอร์ที่โชว์ขึ้นกับกลยุทธ์ที่ใช้ (กันสับสน เช่น rsi2 ไม่มี fast/slow)
+    s = cfg["strategy"]
+    sname = s["name"]
+    if sname in ("ema_cross", "macd"):
+        sparams = f"(fast={s['fast']}/slow={s['slow']})"
+    elif sname == "rsi2":
+        sparams = f"(RSI{s.get('rsi2_period', 2)}<{s.get('rsi2_buy', 10)} เหนือ SMA{s.get('rsi2_trend_ma', 200)})"
+    elif sname == "rsi":
+        sparams = f"(RSI{s.get('rsi_period', 14)} {s.get('rsi_oversold', 30)}/{s.get('rsi_overbought', 70)})"
+    else:
+        sparams = ""
+
     # "เริ่มบอท" ลง console/log เท่านั้น — กัน Discord รก (เด้งเฉพาะ BUY/SELL/ข้ามไม้)
     alerts._console(
-        f"🤖 เริ่มบอท [{mode}] | {symbol} {timeframe} | กลยุทธ์={cfg['strategy']['name']} "
-        f"(fast={cfg['strategy']['fast']}/slow={cfg['strategy']['slow']}) | "
+        f"🤖 เริ่มบอท [{mode}] | {symbol} {timeframe} | กลยุทธ์={sname} {sparams} | "
         f"{size_text} | สถานะเริ่ม: {'ถืออยู่' if position_state['in_position'] else 'ถือเงินสด'}",
     )
 

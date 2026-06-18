@@ -58,10 +58,105 @@ def macd_strategy(df: pd.DataFrame, cfg: dict) -> pd.Series:
     return _apply_trend_filter(df, cfg, pos)
 
 
+def bb_squeeze(df: pd.DataFrame, cfg: dict) -> pd.Series:
+    """Bollinger squeeze — ความผันผวนต่ำ (แบนด์บีบ) แล้วราคาระเบิดทะลุเส้นกลางขึ้น
+
+    (จากหนังสือ: low volatility → high volatility) ซื้อเมื่อเพิ่งมี squeeze + close เหนือ SMA
+    """
+    s = cfg["strategy"]
+    period = int(s.get("bb_period", 20))
+    nstd = float(s.get("bb_std", 2.0))
+    lookback = int(s.get("bb_squeeze_lookback", 100))
+    quantile = float(s.get("bb_squeeze_quantile", 0.25))
+    arm = int(s.get("bb_squeeze_arm", 5))
+
+    middle, upper, lower = ind.bollinger(df["close"], period, nstd)
+    width = (upper - lower) / middle
+    thresh = width.rolling(lookback, min_periods=period).quantile(quantile)
+    squeezed = (width <= thresh).fillna(False)
+    recent_squeeze = squeezed.rolling(arm, min_periods=1).max().astype(bool)
+
+    pos = pd.Series(0, index=df.index)
+    holding = 0
+    for i in range(len(df)):
+        c, m = df["close"].iloc[i], middle.iloc[i]
+        if pd.isna(m):
+            pos.iloc[i] = holding
+            continue
+        if holding == 0 and recent_squeeze.iloc[i] and c > m:
+            holding = 1
+        elif holding == 1 and c < m:
+            holding = 0
+        pos.iloc[i] = holding
+    return _apply_trend_filter(df, cfg, pos)
+
+
+def rsi2_strategy(df: pd.DataFrame, cfg: dict) -> pd.Series:
+    """Connors 2-period RSI — ซื้อตอนย่อแรง (RSI2 ต่ำ) ในเทรนด์ขึ้น, ออกเมื่อเด้งเหนือ MA สั้น
+
+    หมายเหตุ: หนังสือเขียนกลับด้าน (ซื้อ RSI2>90) ซึ่งเป็นเวอร์ชันไล่ราคา —
+    ที่นี่ใช้เวอร์ชัน Connors ดั้งเดิม (mean-reversion) ที่มีงานวิจัยรองรับมากกว่า
+    """
+    s = cfg["strategy"]
+    rp = int(s.get("rsi2_period", 2))
+    buy_th = float(s.get("rsi2_buy", 10))
+    exit_ma = int(s.get("rsi2_exit_ma", 5))
+    trend_ma = int(s.get("rsi2_trend_ma", 200))
+
+    r = ind.rsi(df["close"], rp)
+    ma_exit = ind.sma(df["close"], exit_ma)
+    trend = ind.sma(df["close"], trend_ma)
+
+    pos = pd.Series(0, index=df.index)
+    holding = 0
+    for i in range(len(df)):
+        c = df["close"].iloc[i]
+        if pd.isna(trend.iloc[i]) or pd.isna(r.iloc[i]) or pd.isna(ma_exit.iloc[i]):
+            pos.iloc[i] = holding
+            continue
+        if holding == 0 and c > trend.iloc[i] and r.iloc[i] < buy_th:
+            holding = 1
+        elif holding == 1 and c > ma_exit.iloc[i]:
+            holding = 0
+        pos.iloc[i] = holding
+    return pos  # เทรนด์ถูกบังคับตอนเข้าแล้ว ไม่ต้องใส่ trend filter ซ้ำ
+
+
+def heikin_stoch(df: pd.DataFrame, cfg: dict) -> pd.Series:
+    """Heikin-Ashi + Stochastic — ถือ long ขณะแท่ง HA เขียว (เทรนด์ขึ้น) และไม่ overbought
+
+    (จากหนังสือ: HA กรอง noise + Stochastic ยืนยัน momentum)
+    """
+    s = cfg["strategy"]
+    ha = ind.heikin_ashi(df)
+    k, _ = ind.stochastic(
+        df, int(s.get("stoch_k", 14)), int(s.get("stoch_smooth", 3)), int(s.get("stoch_d", 3))
+    )
+    overbought = float(s.get("stoch_overbought", 80))
+    green = ha["close"] > ha["open"]
+
+    pos = pd.Series(0, index=df.index)
+    holding = 0
+    for i in range(len(df)):
+        if pd.isna(k.iloc[i]):
+            pos.iloc[i] = holding
+            continue
+        is_green = bool(green.iloc[i])
+        if holding == 0 and is_green and k.iloc[i] < overbought:
+            holding = 1
+        elif holding == 1 and not is_green:
+            holding = 0
+        pos.iloc[i] = holding
+    return _apply_trend_filter(df, cfg, pos)
+
+
 STRATEGIES = {
     "ema_cross": ema_cross,
     "rsi": rsi_strategy,
     "macd": macd_strategy,
+    "bb_squeeze": bb_squeeze,
+    "rsi2": rsi2_strategy,
+    "heikin_stoch": heikin_stoch,
 }
 
 

@@ -14,14 +14,29 @@ defaults:
 
 # กลยุทธ์เริ่มต้น (ดู crypto_trader/strategy.py)
 strategy:
-  name: ema_cross        # ema_cross | rsi | macd
-  fast: 19               # จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
+  name: rsi2             # ema_cross | rsi | macd | bb_squeeze | rsi2 | heikin_stoch
+                         # rsi2 ชนะ backtest 5 เหรียญ (drawdown ต่ำสุด) — เปลี่ยนได้ตามใจ
+  fast: 19               # (ema_cross) จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
   slow: 55
   rsi_period: 14
   rsi_oversold: 30
   rsi_overbought: 70
   trend_filter_enabled: false # true = เทรด long เฉพาะตอนราคาอยู่เหนือ EMA ระยะยาว
   trend_ema_period: 200
+  # --- กลยุทธ์จากหนังสือ HumbleTraders ---
+  bb_period: 20          # (bb_squeeze) Bollinger band
+  bb_std: 2.0
+  bb_squeeze_lookback: 100
+  bb_squeeze_quantile: 0.25  # bandwidth ต่ำกว่า 25th percentile = บีบตัว
+  bb_squeeze_arm: 5
+  rsi2_period: 2         # (rsi2 Connors) ซื้อตอนย่อแรงในเทรนด์ขึ้น
+  rsi2_buy: 10           # RSI2 ต่ำกว่า 10 = oversold → ซื้อ
+  rsi2_exit_ma: 5        # ออกเมื่อ close เด้งเหนือ SMA5
+  rsi2_trend_ma: 200     # เทรดเฉพาะตอน close เหนือ SMA200
+  stoch_k: 14            # (heikin_stoch) Stochastic
+  stoch_smooth: 3
+  stoch_d: 3
+  stoch_overbought: 80
 
 backtest:
   initial_cash: 10000    # USDT

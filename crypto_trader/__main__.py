@@ -31,7 +31,7 @@ def _build_parser(cfg: dict) -> argparse.ArgumentParser:
         sp.add_argument("-l", "--limit", type=int, default=d["limit"])
         sp.add_argument(
             "--strategy",
-            choices=["ema_cross", "rsi", "macd"],
+            choices=["ema_cross", "rsi", "macd", "bb_squeeze", "rsi2", "heikin_stoch"],
             help="เลือกกลยุทธ์ทับค่าใน config",
         )
 

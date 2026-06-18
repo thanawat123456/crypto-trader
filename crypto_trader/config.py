@@ -10,14 +10,30 @@ DEFAULTS = {
     "exchange": {"name": "binance", "api_key": "", "api_secret": "", "sandbox": True},
     "defaults": {"symbol": "BTC/USDT", "timeframe": "1h", "limit": 500},
     "strategy": {
-        "name": "ema_cross",
-        "fast": 19,           # จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
+        "name": "rsi2",       # จาก backtest 5 เหรียญ: rsi2 ชนะ ema_cross ทุกตัว + drawdown ต่ำกว่ามาก
+        "fast": 19,           # (ema_cross) จาก optimize BTC/USDT 1h (ดีกว่า 12/26)
         "slow": 55,
         "rsi_period": 14,
         "rsi_oversold": 30,
         "rsi_overbought": 70,
         "trend_filter_enabled": False,
         "trend_ema_period": 200,
+        # bb_squeeze (จากหนังสือ HumbleTraders)
+        "bb_period": 20,
+        "bb_std": 2.0,
+        "bb_squeeze_lookback": 100,
+        "bb_squeeze_quantile": 0.25,
+        "bb_squeeze_arm": 5,
+        # rsi2 (Connors 2-period RSI)
+        "rsi2_period": 2,
+        "rsi2_buy": 10,
+        "rsi2_exit_ma": 5,
+        "rsi2_trend_ma": 200,
+        # heikin_stoch (Heikin-Ashi + Stochastic)
+        "stoch_k": 14,
+        "stoch_smooth": 3,
+        "stoch_d": 3,
+        "stoch_overbought": 80,
     },
     "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
     "bot": {
