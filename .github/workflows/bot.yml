@@ -1,13 +1,8 @@
 name: crypto-trader-bot
 
-# รันบอทบน server ของ GitHub (ฟรี) — ทาง A: Kraken + Discord
-# ใช้ Kraken เพราะ Binance บล็อก IP ของ GitHub (สหรัฐฯ) ด้วย HTTP 451
-# โหมด DRY-RUN: บอทเช็คสัญญาณ + ส่งแจ้งเตือนเข้า Discord (ไม่กดออเดอร์เอง)
+# ใช้สำหรับกด Run workflow เพื่อทดสอบเท่านั้น
+# รอบอัตโนมัติย้ายไปรันบน Google Cloud ผ่าน systemd แล้ว เพื่อไม่ให้บอทรันซ้ำ 2 ที่
 on:
-  schedule:
-    # ทุก 30 นาที (UTC) แต่เลี่ยงนาที 00/30 เพราะ GitHub Actions ช่วงนั้นคนใช้เยอะ
-    # GitHub อาจรันช้ากว่ากำหนด 5-15 นาทีในช่วงคนใช้เยอะ ถือว่าปกติ
-    - cron: "7,37 * * * *"
   workflow_dispatch:        # ปุ่มกดรันเองจากหน้าเว็บ GitHub
 
 concurrency:
