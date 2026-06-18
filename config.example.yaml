@@ -37,8 +37,10 @@ bot:
 paper:
   enabled: true           # จำลองพอร์ตใน DRY-RUN โดยไม่ส่ง order จริง
   initial_cash: 300       # ทุนจำลองเริ่มต้น (USDT)
-  allocation_pct: 0.2     # ใช้เงินสดสูงสุด 20% ต่อไม้
+  allocation_pct: 0.2     # โหมด allocation: ใช้เงินสดสูงสุด 20% ต่อไม้
   fee: 0.001              # fee จำลอง 0.1%
+  sizing_mode: risk       # allocation = ใช้ % เงินสด | risk = เสี่ยงคงที่ต่อไม้ (แนะนำ)
+  risk_per_trade_pct: 0.01 # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต (ขนาดไม้ปรับตามระยะ stop)
 
 market_filter:
   enabled: true           # เปิด BUY เฉพาะตอน BTC 4h อยู่เหนือ EMA200
@@ -58,9 +60,16 @@ smart_filter:
   loss_cooldown_hours: 24 # หลัง SELL ขาดทุน พัก symbol นั้น 24 ชั่วโมง
 
 risk:
-  stop_loss_pct: 0.02    # ขาดทุน 2% จากราคาเข้าแล้วขายออก
-  take_profit_pct: 0.04  # กำไร 4% จากราคาเข้าแล้วขายออก
+  stop_loss_pct: 0.02    # ขาดทุน 2% จากราคาเข้าแล้วขายออก (ใช้เมื่อ atr_stops_enabled=false)
+  take_profit_pct: 0.04  # กำไร 4% จากราคาเข้าแล้วขายออก (ใช้เมื่อ atr_stops_enabled=false)
   max_position_pct: 1.0  # เพดานขนาด position เทียบกับเงินพอร์ตสำหรับ backtest
+  # exit ขั้นสูง — ปิดไว้ก่อน เปิดเพื่อทดลองในขาขึ้นแล้ว backtest เทียบก่อนใช้จริง
+  trailing_stop_pct: 0.0    # 0 = ปิด; เช่น 0.08 = ขายเมื่อราคาย่อ 8% จากจุดสูงสุด (ปล่อยกำไรวิ่ง)
+  atr_stops_enabled: false  # true = ใช้ ATR กำหนด SL/TP ตามความผันผวนจริง (แทน % ตายตัว)
+  atr_period: 14
+  atr_sl_mult: 3.0          # SL = ราคาเข้า − 3×ATR
+  atr_tp_mult: 5.0          # TP = ราคาเข้า + 5×ATR
+  max_concurrent_positions: 3 # 0 = ไม่จำกัด; 3 = ถือพร้อมกันสูงสุด 3 เหรียญ (คุมเสี่ยงพอร์ตรวม)
   journal_path: trade_journal.csv
 
 alerts:

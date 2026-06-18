@@ -32,6 +32,7 @@ def load_state(symbol: str, timeframe: str, path: str = DEFAULT_PATH) -> dict:
         "updated_at": saved.get("updated_at"),
         "entry_price": saved.get("entry_price"),
         "amount": saved.get("amount"),
+        "peak_price": saved.get("peak_price"),
     }
 
 
@@ -42,6 +43,7 @@ def save_state(
     path: str = DEFAULT_PATH,
     entry_price: float | None = None,
     amount: float | None = None,
+    peak_price: float | None = None,
 ) -> None:
     """บันทึกสถานะแบบ atomic (เขียนไฟล์ temp แล้ว replace กันไฟล์พังถ้าดับกลางคัน)"""
     all_state = {}
@@ -56,6 +58,7 @@ def save_state(
         "in_position": in_position,
         "entry_price": entry_price,
         "amount": amount,
+        "peak_price": peak_price,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -73,6 +76,21 @@ def _load_all(path: str = DEFAULT_PATH) -> dict:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def count_open_positions(path: str = DEFAULT_PATH, exclude_key: str | None = None) -> int:
+    """นับจำนวนคู่ symbol+timeframe ที่กำลังถือเหรียญอยู่ (ข้าม __portfolio__)
+
+    ใช้คุมความเสี่ยงพอร์ตรวม: จำกัดจำนวนไม้ที่ถือพร้อมกัน
+    exclude_key: ข้ามคีย์ของ symbol ปัจจุบัน (กันนับตัวเอง)
+    """
+    count = 0
+    for key, val in _load_all(path).items():
+        if key == PORTFOLIO_KEY or key == exclude_key:
+            continue
+        if isinstance(val, dict) and val.get("in_position"):
+            count += 1
+    return count
 
 
 def load_portfolio(initial_cash: float, path: str = DEFAULT_PATH) -> dict:

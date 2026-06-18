@@ -31,6 +31,8 @@ DEFAULTS = {
         "initial_cash": 300,
         "allocation_pct": 0.2,
         "fee": 0.001,
+        "sizing_mode": "risk",       # "allocation" = ใช้ % ของเงินสด | "risk" = เสี่ยงคงที่ต่อไม้
+        "risk_per_trade_pct": 0.01,  # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต
     },
     "market_filter": {
         "enabled": True,
@@ -53,6 +55,14 @@ DEFAULTS = {
         "stop_loss_pct": 0.02,
         "take_profit_pct": 0.04,
         "max_position_pct": 1.0,
+        # exit ขั้นสูง — ปิดไว้ก่อน (backtest ขาลงยังไม่ชนะ SL/TP เรียบง่าย)
+        # เปิดเพื่อทดลองในตลาดขาขึ้น แล้ว backtest เทียบก่อนใช้จริง
+        "trailing_stop_pct": 0.0,         # 0 = ปิด; เช่น 0.08 = ขายเมื่อราคาย่อ 8% จากจุดสูงสุด (ปล่อยกำไรวิ่ง)
+        "atr_stops_enabled": False,       # True = ใช้ ATR กำหนด SL/TP ตามความผันผวนจริง (แทน % ตายตัว)
+        "atr_period": 14,
+        "atr_sl_mult": 3.0,               # SL = ราคาเข้า − 3×ATR
+        "atr_tp_mult": 5.0,               # TP = ราคาเข้า + 5×ATR
+        "max_concurrent_positions": 3,    # 0 = ไม่จำกัด; เช่น 3 = ถือพร้อมกันสูงสุด 3 เหรียญ
         "journal_path": "trade_journal.csv",
     },
     "alerts": {

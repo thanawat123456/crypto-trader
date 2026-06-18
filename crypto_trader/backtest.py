@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .indicators import atr
 from .strategy import get_position
 
 
@@ -60,6 +61,15 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     )
     stop_loss = float(risk.get("stop_loss_pct", 0.0) or 0.0)
     take_profit = float(risk.get("take_profit_pct", 0.0) or 0.0)
+    trailing = float(risk.get("trailing_stop_pct", 0.0) or 0.0)
+
+    # ATR-based stops: เตรียมระยะ SL/TP รายแท่งตามความผันผวนจริง
+    atr_enabled = bool(risk.get("atr_stops_enabled", False))
+    atr_pct = None
+    if atr_enabled:
+        atr_pct = (atr(df, int(risk.get("atr_period", 14))) / df["close"]).fillna(0.0)
+        atr_sl_mult = float(risk.get("atr_sl_mult", 2.0))
+        atr_tp_mult = float(risk.get("atr_tp_mult", 3.0))
 
     signal_position = get_position(df, cfg).shift(1).fillna(0)
     closes = df["close"]
@@ -69,6 +79,7 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
     current_equity = initial
     held = 0.0
     entry_price = None
+    peak_price = None
     trades = 0
 
     for i, (_, price) in enumerate(closes.items()):
@@ -78,7 +89,17 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
         target = position_size if signal_position.iloc[i] == 1 else 0.0
         if held > 0 and entry_price:
             move = float(price / entry_price - 1)
-            if (stop_loss and move <= -stop_loss) or (take_profit and move >= take_profit):
+            peak_price = max(peak_price or entry_price, float(price))
+            # ระยะ SL/TP — ปรับตาม ATR ถ้าเปิดใช้ ไม่งั้น % ตายตัว
+            if atr_enabled and float(atr_pct.iloc[i]) > 0:
+                sl_dist = atr_sl_mult * float(atr_pct.iloc[i])
+                tp_dist = atr_tp_mult * float(atr_pct.iloc[i])
+            else:
+                sl_dist, tp_dist = stop_loss, take_profit
+            hit_sl = sl_dist and move <= -sl_dist
+            hit_tp = tp_dist and move >= tp_dist
+            hit_trail = trailing and price <= peak_price * (1 - trailing)
+            if hit_sl or hit_tp or hit_trail:
                 target = 0.0
 
         turnover = abs(target - held)
@@ -86,6 +107,7 @@ def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> Backtest
             trades += 1
             strat_ret -= turnover * fee
             entry_price = float(price) if target > 0 else None
+            peak_price = float(price) if target > 0 else None
 
         current_equity *= 1 + strat_ret
         equity_values.append(current_equity)

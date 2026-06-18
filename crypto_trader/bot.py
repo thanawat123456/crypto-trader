@@ -31,14 +31,29 @@ def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool)
     return exchange.create_market_sell_order(symbol, amount)
 
 
-def _paper_buy_amount(cfg: dict, portfolio: dict, price: float, fallback_amount: float) -> float:
+def _paper_buy_amount(
+    cfg: dict, portfolio: dict, price: float, fallback_amount: float,
+    stop_distance: float | None = None,
+) -> float:
     paper = cfg.get("paper", {})
     if not paper.get("enabled", True):
         return fallback_amount
     cash = float(portfolio.get("cash", 0.0))
-    allocation = min(max(float(paper.get("allocation_pct", 0.2)), 0.0), 1.0)
-    budget = cash * allocation
     fee = float(paper.get("fee", 0.001))
+    if cash <= 0 or price <= 0:
+        return 0.0
+
+    mode = paper.get("sizing_mode", "allocation")
+    if mode == "risk" and stop_distance and stop_distance > 0:
+        # ขนาดไม้ให้ "ถ้าโดน SL = เสีย risk_per_trade_pct ของพอร์ต" เท่ากันทุกไม้
+        # (ใช้เงินสดเป็นฐาน → ยิ่งถือหลายไม้ ฐานยิ่งเล็ก = ระมัดระวังอัตโนมัติ)
+        risk_pct = min(max(float(paper.get("risk_per_trade_pct", 0.01)), 0.0), 1.0)
+        position_value = (cash * risk_pct) / stop_distance
+        budget = min(position_value, cash)  # ห้ามเกินเงินสดที่มี
+    else:
+        allocation = min(max(float(paper.get("allocation_pct", 0.2)), 0.0), 1.0)
+        budget = cash * allocation
+
     if budget <= 0:
         return 0.0
     return budget / (float(price) * (1 + fee))
@@ -119,6 +134,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
     risk = cfg.get("risk", {})
     stop_loss = float(risk.get("stop_loss_pct", 0.0) or 0.0)
     take_profit = float(risk.get("take_profit_pct", 0.0) or 0.0)
+    trailing = float(risk.get("trailing_stop_pct", 0.0) or 0.0)
     journal_path = risk.get("journal_path", "trade_journal.csv")
 
     df = fetch_ohlcv(exchange, symbol, timeframe, limit)
@@ -127,13 +143,27 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
     desired_position = int(get_position(closed, cfg).iloc[-1]) if len(closed) else 0
     price = latest_price(exchange, symbol)
 
+    # ระยะ SL/TP — ปรับตามความผันผวนจริง (ATR) ถ้าเปิดใช้ ไม่งั้นใช้ % ตายตัว
+    sl_dist, tp_dist = stop_loss, take_profit
+    if risk.get("atr_stops_enabled") and len(closed):
+        atr_val = float(atr(closed, int(risk.get("atr_period", 14))).iloc[-1])
+        if price > 0 and atr_val > 0:
+            atr_pct = atr_val / price
+            sl_dist = float(risk.get("atr_sl_mult", 2.0)) * atr_pct
+            tp_dist = float(risk.get("atr_tp_mult", 3.0)) * atr_pct
+
     exit_reason = None
+    peak_price = position_state.get("peak_price")
     if in_position and entry_price:
+        # อัปเดตจุดสูงสุดตั้งแต่เข้าไม้ (ฐานของ trailing stop)
+        peak_price = max(float(peak_price or entry_price), price)
         move = price / float(entry_price) - 1
-        if stop_loss and move <= -stop_loss:
+        if sl_dist and move <= -sl_dist:
             exit_reason = "stop_loss"
-        elif take_profit and move >= take_profit:
+        elif tp_dist and move >= tp_dist:
             exit_reason = "take_profit"
+        elif trailing and price <= peak_price * (1 - trailing):
+            exit_reason = "trailing_stop"
 
     buy_reason = None
     if signal == "BUY" and not in_position:
@@ -167,7 +197,22 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {smart_reason}")
             position_state["last_price"] = price
             return position_state, portfolio
-        buy_amount = _paper_buy_amount(cfg, portfolio, price, amount) if dry_run else amount
+        # คุมความเสี่ยงพอร์ตรวม: จำกัดจำนวนไม้ที่ถือพร้อมกัน
+        max_concurrent = int(risk.get("max_concurrent_positions", 0) or 0)
+        if max_concurrent > 0:
+            open_now = state.count_open_positions(exclude_key=f"{symbol}|{timeframe}")
+            if open_now >= max_concurrent:
+                alerts.notify(
+                    cfg,
+                    f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | "
+                    f"max_positions={open_now}/{max_concurrent}",
+                )
+                position_state["last_price"] = price
+                return position_state, portfolio
+        buy_amount = (
+            _paper_buy_amount(cfg, portfolio, price, amount, stop_distance=sl_dist)
+            if dry_run else amount
+        )
         if buy_amount <= 0:
             alerts._console(f"… ข้าม BUY เพราะเงินสดจำลองไม่พอ | {symbol} @ {price:,.2f}")
             position_state["last_price"] = price
@@ -177,8 +222,8 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             fee = float(cfg.get("paper", {}).get("fee", 0.001))
             portfolio["cash"] = float(portfolio.get("cash", 0.0)) - (buy_amount * price * (1 + fee))
             state.save_portfolio(portfolio)
-        position_state = {"in_position": True, "entry_price": price, "amount": buy_amount}
-        state.save_state(symbol, timeframe, True, entry_price=price, amount=buy_amount)
+        position_state = {"in_position": True, "entry_price": price, "amount": buy_amount, "peak_price": price}
+        state.save_state(symbol, timeframe, True, entry_price=price, amount=buy_amount, peak_price=price)
         record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, buy_reason)
         msg = alerts.signal_message(symbol, timeframe, "BUY", price)
         alerts.notify(cfg, f"{msg} | reason={buy_reason}")
@@ -196,14 +241,21 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             portfolio["cash"] = float(portfolio.get("cash", 0.0)) + exit_value * (1 - fee)
             portfolio["realized_pnl"] = float(portfolio.get("realized_pnl", 0.0)) + pnl
             state.save_portfolio(portfolio)
-        position_state = {"in_position": False, "entry_price": None, "amount": None}
-        state.save_state(symbol, timeframe, False, entry_price=None, amount=None)
+        position_state = {"in_position": False, "entry_price": None, "amount": None, "peak_price": None}
+        state.save_state(symbol, timeframe, False, entry_price=None, amount=None, peak_price=None)
         record_trade(journal_path, symbol, timeframe, "SELL", price, sell_amount, reason, pnl)
         msg = alerts.signal_message(symbol, timeframe, "SELL", price)
         alerts.notify(cfg, f"{msg} | reason={reason} | PnL≈{pnl:,.2f}")
     else:
         where = "ถืออยู่" if in_position else "ถือเงินสด"
         alerts._console(f"… ไม่มีสัญญาณใหม่ ({where}) | {symbol} @ {price:,.2f}")
+        # จำจุดสูงสุดล่าสุดไว้ — สำคัญสำหรับ trailing stop ที่ต้องข้ามรอบ/ข้าม process
+        if in_position:
+            position_state["peak_price"] = peak_price
+            state.save_state(
+                symbol, timeframe, True,
+                entry_price=entry_price, amount=saved_amount, peak_price=peak_price,
+            )
 
     position_state["last_price"] = price
     return position_state, portfolio
@@ -225,8 +277,12 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         state.save_portfolio(portfolio)
     size_text = f"เทรดครั้งละ {amount}"
     if dry_run and paper_cfg.get("enabled", True):
-        allocation = float(paper_cfg.get("allocation_pct", 0.2)) * 100
-        size_text = f"paper allocation={allocation:.0f}% | cash≈{portfolio['cash']:,.2f}"
+        if paper_cfg.get("sizing_mode") == "risk":
+            risk_pct = float(paper_cfg.get("risk_per_trade_pct", 0.01)) * 100
+            size_text = f"paper risk={risk_pct:.1f}%/ไม้ | cash≈{portfolio['cash']:,.2f}"
+        else:
+            allocation = float(paper_cfg.get("allocation_pct", 0.2)) * 100
+            size_text = f"paper allocation={allocation:.0f}% | cash≈{portfolio['cash']:,.2f}"
 
     # โหลดสถานะที่จำไว้ (กันลืม position ตอนรีสตาร์ท)
     saved = state.load_state(symbol, timeframe)
@@ -234,6 +290,7 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         "in_position": bool(saved.get("in_position", False)),
         "entry_price": saved.get("entry_price"),
         "amount": saved.get("amount"),
+        "peak_price": saved.get("peak_price"),
     }
     # เขียนไฟล์ state ทันที เพื่อให้มีไฟล์เสมอ (สำคัญสำหรับ GitHub Actions ที่ต้อง commit)
     state.save_state(
@@ -242,6 +299,7 @@ def run_bot(exchange, cfg: dict, symbol: str, timeframe: str, once: bool = False
         position_state["in_position"],
         entry_price=position_state["entry_price"],
         amount=position_state["amount"],
+        peak_price=position_state["peak_price"],
     )
 
     # "เริ่มบอท" ลง console/log เท่านั้น — กัน Discord รก (เด้งเฉพาะ BUY/SELL/ข้ามไม้)
