@@ -16,8 +16,8 @@ import time
 
 from . import alerts, state
 from .data import fetch_ohlcv, latest_price
-from .indicators import ema
-from .journal import performance_summary, record_trade
+from .indicators import atr, ema, rsi
+from .journal import loss_cooldown_reason, performance_summary, record_trade
 from .strategy import get_position, latest_signal
 
 MAX_BACKOFF = 600  # หน่วงสูงสุด 10 นาทีเมื่อ error ติดกัน
@@ -68,6 +68,49 @@ def _market_allows_buy(exchange, cfg: dict) -> tuple[bool, str]:
     return False, f"market_not_bullish {symbol} {timeframe} close={close:,.2f} ema{period}={trend:,.2f}"
 
 
+def _symbol_allows_buy(exchange, cfg: dict, symbol: str) -> tuple[bool, str]:
+    smart = cfg.get("smart_filter", {})
+    if not smart.get("enabled", True):
+        return True, "smart_filter_disabled"
+
+    timeframe = smart.get("timeframe", "4h")
+    ema_period = int(smart.get("ema_period", 200))
+    rsi_period = int(smart.get("rsi_period", 14))
+    atr_period = int(smart.get("atr_period", 14))
+    limit = max(ema_period + 5, rsi_period + 20, atr_period + 20, 250)
+
+    try:
+        df = fetch_ohlcv(exchange, symbol, timeframe, limit)
+    except Exception as e:  # noqa: BLE001
+        return False, f"smart_filter_error={e}"
+
+    closed = df.iloc[:-1]
+    if len(closed) < ema_period:
+        return False, f"smart_filter_wait_data={len(closed)}/{ema_period}"
+
+    close = float(closed["close"].iloc[-1])
+    trend = float(ema(closed["close"], ema_period).iloc[-1])
+    rsi_value = float(rsi(closed["close"], rsi_period).iloc[-1])
+    atr_pct = float(atr(closed, atr_period).iloc[-1] / close)
+    rsi_min = float(smart.get("rsi_min", 45))
+    rsi_max = float(smart.get("rsi_max", 70))
+    max_atr_pct = float(smart.get("max_atr_pct", 0.06))
+
+    if close <= trend:
+        return False, f"symbol_not_bullish {symbol} {timeframe} close={close:,.4f} ema{ema_period}={trend:,.4f}"
+    if rsi_value < rsi_min:
+        return False, f"momentum_weak {symbol} {timeframe} rsi={rsi_value:.1f} min={rsi_min:.1f}"
+    if rsi_value > rsi_max:
+        return False, f"momentum_overheated {symbol} {timeframe} rsi={rsi_value:.1f} max={rsi_max:.1f}"
+    if atr_pct > max_atr_pct:
+        return False, f"volatility_high {symbol} {timeframe} atr_pct={atr_pct:.2%} max={max_atr_pct:.2%}"
+
+    return True, (
+        f"smart_ok {symbol} {timeframe} close={close:,.4f} "
+        f"ema{ema_period}={trend:,.4f} rsi={rsi_value:.1f} atr_pct={atr_pct:.2%}"
+    )
+
+
 def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_state, portfolio):
     """ทำงานหนึ่งรอบ: เช็คสัญญาณ + เทรดถ้าจำเป็น คืนสถานะใหม่"""
     in_position = bool(position_state.get("in_position", False))
@@ -107,6 +150,21 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         allowed, market_reason = _market_allows_buy(exchange, cfg)
         if not allowed:
             alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {market_reason}")
+            position_state["last_price"] = price
+            return position_state, portfolio
+        cooldown = loss_cooldown_reason(
+            journal_path,
+            symbol,
+            timeframe,
+            float(cfg.get("smart_filter", {}).get("loss_cooldown_hours", 24)),
+        )
+        if cooldown:
+            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {cooldown}")
+            position_state["last_price"] = price
+            return position_state, portfolio
+        allowed, smart_reason = _symbol_allows_buy(exchange, cfg, symbol)
+        if not allowed:
+            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {smart_reason}")
             position_state["last_price"] = price
             return position_state, portfolio
         buy_amount = _paper_buy_amount(cfg, portfolio, price, amount) if dry_run else amount

@@ -38,6 +38,17 @@ DEFAULTS = {
         "timeframe": "4h",
         "ema_period": 200,
     },
+    "smart_filter": {
+        "enabled": True,
+        "timeframe": "4h",
+        "ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 45,
+        "rsi_max": 70,
+        "atr_period": 14,
+        "max_atr_pct": 0.06,
+        "loss_cooldown_hours": 24,
+    },
     "risk": {
         "stop_loss_pct": 0.02,
         "take_profit_pct": 0.04,

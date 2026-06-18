@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 FIELDS = [
@@ -55,6 +55,28 @@ def _read_rows(path: str) -> list[dict]:
             return list(csv.DictReader(f))
     except OSError:
         return []
+
+
+def loss_cooldown_reason(path: str, symbol: str, timeframe: str, hours: float) -> str | None:
+    """คืนเหตุผลถ้า symbol เพิ่ง SELL ขาดทุนในช่วง cooldown"""
+    if hours <= 0:
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = [
+        row for row in _read_rows(path)
+        if row.get("symbol") == symbol and row.get("timeframe") == timeframe and row.get("side") == "SELL"
+    ]
+    for row in reversed(rows):
+        try:
+            ts = datetime.fromisoformat(row.get("timestamp", ""))
+            pnl = float(row.get("pnl") or 0)
+        except (TypeError, ValueError):
+            continue
+        if ts >= cutoff and pnl < 0:
+            return f"loss_cooldown last_pnl={pnl:,.2f} reason={row.get('reason') or '-'}"
+        if ts < cutoff:
+            break
+    return None
 
 
 def performance_summary(
