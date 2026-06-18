@@ -9,7 +9,7 @@ INTERVAL_SECONDS="${INTERVAL_SECONDS:-1800}"
 RUN_ONCE="${RUN_ONCE:-false}"
 REPORT_EVERY_HOURS="${REPORT_EVERY_HOURS:-24}"   # ส่งสรุปผลเข้า Discord ทุกกี่ชม. (0 = ปิด)
 VALIDATE_EVERY_HOURS="${VALIDATE_EVERY_HOURS:-168}"  # ตรวจสุขภาพกลยุทธ์ทุกกี่ชม. (168=สัปดาห์, 0 = ปิด)
-SCAN_EVERY_HOURS="${SCAN_EVERY_HOURS:-168}"          # สแกนเหรียญ momentum เข้า Discord ทุกกี่ชม. (0 = ปิด)
+SCAN_EVERY_HOURS="${SCAN_EVERY_HOURS:-72}"           # สแกนเหรียญ momentum เข้า Discord ทุกกี่ชม. (72=3วัน, 0 = ปิด)
 SCAN_QUOTE="${SCAN_QUOTE:-USD}"                      # quote สำหรับสแกน (Kraken=USD)
 
 SYMBOLS=("BTC/USD" "ETH/USD" "SOL/USD" "XRP/USD" "ADA/USD")
