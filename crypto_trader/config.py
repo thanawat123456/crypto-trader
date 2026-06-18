@@ -37,7 +37,12 @@ DEFAULTS = {
         # tsmom (Time-Series Momentum — รวมหลาย lookback)
         "tsmom_lookbacks": [20, 60, 120],
     },
-    "backtest": {"initial_cash": 10000, "fee": 0.001, "position_size": 1.0},
+    "backtest": {
+        "initial_cash": 10000,
+        "fee": 0.001,           # ค่าธรรมเนียม exchange ต่อด้าน
+        "slippage_pct": 0.0005, # slippage จริง (ข้าม spread + market impact) ต่อด้าน — Almgren/LOB
+        "position_size": 1.0,
+    },
     "bot": {
         "poll_seconds": 60,
         "trade_amount": 0.001,
@@ -58,6 +63,7 @@ DEFAULTS = {
         "initial_cash": 300,
         "allocation_pct": 0.2,
         "fee": 0.001,
+        "slippage_pct": 0.0005,      # slippage จริงต่อด้าน (ให้ paper sim สมจริงเท่า backtest)
         "sizing_mode": "risk",       # "allocation" | "risk" (เสี่ยงคงที่/ไม้) | "volatility" (vol targeting)
         "risk_per_trade_pct": 0.01,  # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต
         "target_vol": 0.40,          # โหมด volatility: เป้าความผันผวนต่อปี (จาก TSMOM literature 40%)

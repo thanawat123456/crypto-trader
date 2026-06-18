@@ -47,7 +47,8 @@ def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool)
 
 def _paper_settle_sell(cfg: dict, portfolio: dict, entry_price, qty: float, price: float) -> float:
     """คำนวณ PnL + อัปเดตพอร์ตจำลองเมื่อขาย qty (ใช้ทั้งขายเต็มและ partial TP)"""
-    fee = float(cfg.get("paper", {}).get("fee", 0.001))
+    paper = cfg.get("paper", {})
+    fee = float(paper.get("fee", 0.001)) + float(paper.get("slippage_pct", 0.0) or 0.0)
     entry_cost = float(entry_price or price) * qty
     exit_value = price * qty
     pnl = exit_value * (1 - fee) - entry_cost * (1 + fee)
@@ -64,7 +65,7 @@ def _paper_buy_amount(
     if not paper.get("enabled", True):
         return fallback_amount
     cash = float(portfolio.get("cash", 0.0))
-    fee = float(paper.get("fee", 0.001))
+    fee = float(paper.get("fee", 0.001)) + float(paper.get("slippage_pct", 0.0) or 0.0)
     if cash <= 0 or price <= 0:
         return 0.0
 
@@ -330,7 +331,8 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             return position_state, portfolio
         _place_order(exchange, symbol, "buy", buy_amount, dry_run)
         if dry_run and cfg.get("paper", {}).get("enabled", True):
-            fee = float(cfg.get("paper", {}).get("fee", 0.001))
+            pc = cfg.get("paper", {})
+            fee = float(pc.get("fee", 0.001)) + float(pc.get("slippage_pct", 0.0) or 0.0)
             portfolio["cash"] = float(portfolio.get("cash", 0.0)) - (buy_amount * price * (1 + fee))
             state.save_portfolio(portfolio)
         entry_time = datetime.now(timezone.utc).isoformat()

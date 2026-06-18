@@ -59,7 +59,8 @@ _BARS_PER_YEAR = {
 def run_backtest(df: pd.DataFrame, cfg: dict, timeframe: str = "1h") -> BacktestResult:
     bt = cfg["backtest"]
     risk = cfg.get("risk", {})
-    fee = float(bt["fee"])
+    # ต้นทุนรวมต่อด้าน = ค่าธรรมเนียม + slippage (ข้าม spread + market impact)
+    fee = float(bt["fee"]) + float(bt.get("slippage_pct", 0.0) or 0.0)
     initial = float(bt["initial_cash"])
     position_size = min(
         float(bt.get("position_size", 1.0)),

@@ -41,7 +41,8 @@ strategy:
 
 backtest:
   initial_cash: 10000    # USDT
-  fee: 0.001             # 0.1% ต่อการเทรด
+  fee: 0.001             # ค่าธรรมเนียม exchange ต่อด้าน (0.1%)
+  slippage_pct: 0.0005   # slippage จริง (ข้าม spread + market impact) ต่อด้าน — Almgren/LOB
   position_size: 1.0     # สัดส่วนเงินที่ลงต่อไม้ (1.0 = all-in)
 
 bot:
@@ -67,6 +68,7 @@ paper:
   initial_cash: 300       # ทุนจำลองเริ่มต้น (USDT)
   allocation_pct: 0.2     # โหมด allocation: ใช้เงินสดสูงสุด 20% ต่อไม้
   fee: 0.001              # fee จำลอง 0.1%
+  slippage_pct: 0.0005    # slippage จริงต่อด้าน (ให้ paper sim สมจริงเท่า backtest)
   sizing_mode: risk       # allocation | risk (เสี่ยงคงที่/ไม้ แนะนำ) | volatility (vol targeting)
   risk_per_trade_pct: 0.01 # โหมด risk: ถ้าโดน SL จะเสีย ~1% ของพอร์ต (ขนาดไม้ปรับตามระยะ stop)
   target_vol: 0.40         # โหมด volatility: เป้าผันผวนต่อปี (จาก TSMOM literature ~40%)
