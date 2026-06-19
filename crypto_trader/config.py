@@ -48,8 +48,9 @@ DEFAULTS = {
         "trade_amount": 0.001,
         "summary_enabled": True,
         "enter_on_current_signal": True,
-        # ตะกร้าเหรียญที่บอทเทรด (Kraken /USD — สภาพคล่องดีกว่า /USDT มาก)
-        "symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD"],
+        # ตะกร้าเหรียญที่บอทเทรด (Kraken /USD liquid — 10 established + HYPE ตัวลอง)
+        "symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD",
+                    "DOGE/USD", "XLM/USD", "SUI/USD", "NEAR/USD", "XMR/USD", "HYPE/USD"],
     },
     "momentum_filter": {
         # ซื้อเฉพาะเหรียญที่ momentum แรงสุด top_k ในตะกร้า (จาก SSRN: เน้นตัวชนะไม่กี่ตัว)

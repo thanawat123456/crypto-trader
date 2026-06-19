@@ -50,12 +50,18 @@ bot:
   trade_amount: 0.001    # ปริมาณเหรียญต่อไม้ (เช่น 0.001 BTC)
   summary_enabled: true   # ส่งสรุป performance เข้า Discord/console หลังรันแต่ละรอบ
   enter_on_current_signal: true # DRY-RUN: ถ้ากลยุทธ์บอกว่าควรถืออยู่แล้ว ให้จำลอง BUY ได้
-  symbols:               # ตะกร้าเหรียญที่เทรด (Kraken /USD — สภาพคล่องดีกว่า /USDT)
+  symbols:               # ตะกร้าเหรียญที่เทรด (Kraken /USD liquid — 10 + HYPE ตัวลอง)
     - BTC/USD
     - ETH/USD
     - SOL/USD
     - XRP/USD
     - ADA/USD
+    - DOGE/USD
+    - XLM/USD
+    - SUI/USD
+    - NEAR/USD
+    - XMR/USD
+    - HYPE/USD
 
 momentum_filter:         # ซื้อเฉพาะเหรียญ momentum แรงสุดในตะกร้า (จาก SSRN/Momentum research)
   enabled: false         # default OFF — เปิดแล้ว backtest/paper เทียบก่อนใช้จริง
