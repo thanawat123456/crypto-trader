@@ -215,6 +215,11 @@ def build_symbol_rows(state_data: dict, trades: pd.DataFrame, include_market: bo
 
 
 def style_symbol_table(df: pd.DataFrame):
+    df = df.copy()
+    numeric_cols = ["price", "entry", "amount", "peak", "unrealized", "realized", "WR%"]
+    for col in numeric_cols:
+        if col in df:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df.style.format({
         "price": "{:,.4f}",
         "entry": "{:,.4f}",
@@ -338,13 +343,15 @@ with right:
     st.subheader("🏆 สรุปรายเหรียญ")
     if not symbol_df.empty:
         perf = symbol_df[["symbol", "realized", "unrealized", "SELL", "WR%"]].copy()
+        for col in ("realized", "unrealized", "SELL", "WR%"):
+            perf[col] = pd.to_numeric(perf[col], errors="coerce")
         perf["total_pnl"] = perf["realized"].fillna(0) + perf["unrealized"].fillna(0)
         perf = perf.sort_values("total_pnl", ascending=False)
         st.dataframe(
             perf[["symbol", "total_pnl", "realized", "unrealized", "SELL", "WR%"]].style.format({
                 "total_pnl": "{:+,.2f}", "realized": "{:+,.2f}",
                 "unrealized": "{:+,.2f}", "WR%": "{:.0f}%",
-            }),
+            }, na_rep="-"),
             use_container_width=True, hide_index=True,
         )
 
