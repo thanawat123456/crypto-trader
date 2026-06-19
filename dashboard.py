@@ -301,17 +301,23 @@ c6.metric("Win rate", f"{win_rate:.0f}%", f"SELL {sells_total}")
 
 st.divider()
 
-st.subheader("📊 Market movement ทุกเหรียญ")
+st.subheader("📊 Market movement แยกรายเหรียญ")
 if include_market:
     closes = get_close_matrix(tuple(WATCHLIST))
     if closes.empty:
         st.warning("โหลดราคาตลาดไม่ได้ ลองรีเฟรชหรือปิด/เปิดตัวเลือกดึงราคาตลาดสด")
     else:
-        normalized = closes.tail(120) / closes.tail(120).iloc[0] * 100
-        st.line_chart(normalized, height=320)
-        st.caption("กราฟ normalized: เริ่มที่ 100 เพื่อเทียบการเคลื่อนไหวของทุกเหรียญพร้อมกัน")
+        for row_symbols in [WATCHLIST[i:i + 2] for i in range(0, len(WATCHLIST), 2)]:
+            cols = st.columns(len(row_symbols))
+            for col, sym in zip(cols, row_symbols):
+                with col:
+                    st.caption(sym)
+                    if sym in closes:
+                        st.line_chart(closes[sym].tail(120), height=220)
+                    else:
+                        st.info("ไม่มีข้อมูลราคา")
 else:
-    st.info("เปิดตัวเลือก 'ดึงราคาตลาดสด' ใน sidebar เพื่อดูกราฟ market movement")
+    st.info("เปิดตัวเลือก 'ดึงราคาตลาดสด' ใน sidebar เพื่อดูกราฟ market movement รายเหรียญ")
 
 st.divider()
 
