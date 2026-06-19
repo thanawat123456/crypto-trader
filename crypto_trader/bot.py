@@ -37,6 +37,21 @@ def _hours_held(position_state: dict) -> float:
     return (datetime.now(timezone.utc) - entered).total_seconds() / 3600.0
 
 
+def _reject(cfg, symbol, timeframe, buy_reason, detail):
+    """แจ้ง 'ข้าม BUY' แบบ dedupe — Discord ครั้งเดียวต่อเหตุผล, รอบที่ซ้ำเดิม = log เท่านั้น
+
+    กันสแปม: XLM ที่เข้าเงื่อนไขซื้อทุกรอบแต่โดนบล็อกด้วยเหตุเดิม จะไม่เด้ง Discord ซ้ำ ๆ
+    """
+    category = detail.split()[0] if detail else "reject"
+    key = f"reject_{symbol}|{timeframe}"
+    msg = f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {detail}"
+    if state.get_note(key) == category:
+        alerts._console(msg)
+    else:
+        alerts.notify(cfg, msg)
+        state.set_note(key, category)
+
+
 def _place_order(exchange, symbol: str, side: str, amount: float, dry_run: bool):
     if dry_run:
         return {"info": "dry-run (ไม่ส่งคำสั่งจริง)"}
@@ -284,7 +299,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
                 return position_state, portfolio
         allowed, market_reason = _market_allows_buy(exchange, cfg)
         if not allowed:
-            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {market_reason}")
+            _reject(cfg, symbol, timeframe, buy_reason, market_reason)
             position_state["last_price"] = price
             return position_state, portfolio
         cooldown = loss_cooldown_reason(
@@ -294,18 +309,18 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             float(cfg.get("smart_filter", {}).get("loss_cooldown_hours", 24)),
         )
         if cooldown:
-            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {cooldown}")
+            _reject(cfg, symbol, timeframe, buy_reason, cooldown)
             position_state["last_price"] = price
             return position_state, portfolio
         allowed, smart_reason = _symbol_allows_buy(exchange, cfg, symbol)
         if not allowed:
-            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {smart_reason}")
+            _reject(cfg, symbol, timeframe, buy_reason, smart_reason)
             position_state["last_price"] = price
             return position_state, portfolio
         # relative momentum: ซื้อเฉพาะเหรียญที่แรงสุดในตะกร้า
         allowed, mom_reason = _momentum_allows_buy(exchange, cfg, symbol)
         if not allowed:
-            alerts.notify(cfg, f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | {mom_reason}")
+            _reject(cfg, symbol, timeframe, buy_reason, mom_reason)
             position_state["last_price"] = price
             return position_state, portfolio
         # คุมความเสี่ยงพอร์ตรวม: จำกัดจำนวนไม้ที่ถือพร้อมกัน
@@ -313,11 +328,8 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
         if max_concurrent > 0:
             open_now = state.count_open_positions(exclude_key=f"{symbol}|{timeframe}")
             if open_now >= max_concurrent:
-                alerts.notify(
-                    cfg,
-                    f"⏸️ ข้าม BUY | {symbol} | reason={buy_reason} | "
-                    f"max_positions={open_now}/{max_concurrent}",
-                )
+                _reject(cfg, symbol, timeframe, buy_reason,
+                        f"max_positions={open_now}/{max_concurrent}")
                 position_state["last_price"] = price
                 return position_state, portfolio
         buy_amount = (
@@ -345,6 +357,7 @@ def _tick(exchange, cfg, symbol, timeframe, amount, limit, dry_run, position_sta
             symbol, timeframe, True, entry_price=price, amount=buy_amount, peak_price=price,
             entry_time=entry_time, entry_r=sl_dist, init_amount=buy_amount, scale_level=0,
         )
+        state.set_note(f"reject_{symbol}|{timeframe}", None)  # ซื้อสำเร็จ → ล้าง dedupe
         record_trade(journal_path, symbol, timeframe, "BUY", price, buy_amount, buy_reason)
         msg = alerts.signal_message(symbol, timeframe, "BUY", price)
         alerts.notify(cfg, f"{msg} | reason={buy_reason}")

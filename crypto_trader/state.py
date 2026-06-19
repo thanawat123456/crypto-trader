@@ -100,6 +100,25 @@ def set_marker(name: str, path: str = DEFAULT_PATH) -> None:
     os.replace(tmp, path)
 
 
+def get_note(name: str, path: str = DEFAULT_PATH) -> str | None:
+    """อ่านค่าข้อความที่จำไว้ (เช่น เหตุผล reject ล่าสุด — ใช้ dedupe แจ้งเตือน)"""
+    return _load_all(path).get(f"__note_{name}__", {}).get("v")
+
+
+def set_note(name: str, value: str | None, path: str = DEFAULT_PATH) -> None:
+    """บันทึก/ล้างค่าข้อความ (value=None = ล้าง)"""
+    all_state = _load_all(path)
+    key = f"__note_{name}__"
+    if value is None:
+        all_state.pop(key, None)
+    else:
+        all_state[key] = {"v": value, "at": datetime.now(timezone.utc).isoformat()}
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(all_state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
 def load_portfolio(initial_cash: float, path: str = DEFAULT_PATH) -> dict:
     """อ่านพอร์ตจำลอง ถ้ายังไม่มีให้สร้างจาก initial_cash"""
     all_state = _load_all(path)
