@@ -32,6 +32,7 @@ SYMBOLS = ("BTC/USDT", "ETH/USDT")
 START = datetime(2018, 1, 1, tzinfo=timezone.utc)
 END = datetime(2026, 6, 1, tzinfo=timezone.utc)
 SECONDS = 14400
+QUALITY_POLICY = "Exclude and report otherwise-valid grid candles with an intra-bar shortened provider close; never normalize/fill them; reject out-of-bar closes and all other invalid data"
 MAX_REQUESTS = 420
 MAX_BYTES = 16 * 1024 * 1024
 MAX_OBJECT = 1024 * 1024
@@ -130,12 +131,14 @@ def decode_archive(raw, checksum, item):
             raise ValueError("Unbounded/encrypted/symlinked ZIP member")
         member = zipped.read(info)  # Also checks the ZIP CRC.
     unit = 1000000 if month.year >= 2025 else 1000
-    bars, previous = [], None
+    bars, previous, excluded, row_count = [], None, [], 0
     for row in csv.reader(io.StringIO(member.decode("utf-8-sig"))):
+        row_count += 1
         if len(row) != 12:
             raise ValueError("Expected 12 spot kline columns; no header/futures substitution")
         opening, closing, trades = int(row[0]), int(row[6]), int(row[8])
-        if (opening % (SECONDS * unit) or closing != opening + SECONDS * unit - 1
+        expected_close = opening + SECONDS * unit - 1
+        if (opening % (SECONDS * unit) or not opening <= closing <= expected_close
                 or trades < 0 or any(money(row[i]) < 0 for i in (7, 9, 10))):
             raise ValueError("Invalid timestamp units/grid, close time or trade quantities")
         at = datetime.fromtimestamp(opening // unit, timezone.utc)
@@ -145,11 +148,17 @@ def decode_archive(raw, checksum, item):
         bar.validate()
         if money(row[9]) > bar.volume:
             raise ValueError("Taker volume exceeds total volume")
-        bars.append(bar)
+        if closing != expected_close:
+            excluded.append({"start": at.isoformat(), "provider_close": closing, "expected_full_close": expected_close,
+                             "unit": "microseconds" if unit == 1000000 else "milliseconds",
+                             "reason": "shortened_provider_close_not_a_complete_H4_bar", "row_sha256": sha(canonical(row))})
+        else:
+            bars.append(bar)
         previous = at
     if not bars:
         raise ValueError("Empty monthly archive")
-    return bars, {"member": expected_member, "member_sha256": sha(member), "zip_crc32": f"{info.CRC:08x}", "rows": len(bars)}
+    return bars, {"member": expected_member, "member_sha256": sha(member), "zip_crc32": f"{info.CRC:08x}",
+                  "rows": row_count, "accepted_full_bars": len(bars), "excluded_partial_closes": excluded}
 
 
 def csv_payload(grouped):
@@ -200,7 +209,7 @@ def capture_reference(output, *, client=None, progress=None):
     grouped, sources, receipts = {s: [] for s in SYMBOLS}, [], []
     # This is an application output, written once before the first HTTP GET.
     write_new(output / "registration.json", {"scope": "NON-PRODUCTION GLOBAL SPOT REFERENCE", "plan": archive_plan(),
-              "license": LICENSE, "retry": False, "approved_for_live": False})
+              "license": LICENSE, "quality_policy": QUALITY_POLICY, "retry": False, "approved_for_live": False})
     try:
         with (output / "receipts.jsonl").open("x") as journal:
             for number, item in enumerate(archive_plan()):
@@ -226,6 +235,7 @@ def capture_reference(output, *, client=None, progress=None):
             stream.write(payload)
         manifest = {"schema": 1, "status": "verified_download", "venue": "binance-global-spot-reference",
                     "source": BASE, "license": LICENSE, "synthetic": False,
+                    "quality_policy": QUALITY_POLICY,
                     "timeframe_minutes": 240, "symbols": SYMBOLS, "start": START.isoformat(), "end_exclusive": END.isoformat(),
                     "csv_sha256": sha(payload), "sources": sources, "receipts": receipts,
                     "requests": client.attempts, "bytes_downloaded": client.bytes, **summary,
@@ -249,6 +259,7 @@ def audit_reference(directory):
     manifest = json.loads((directory / "manifest.json").read_text())
     registration = json.loads((directory / "registration.json").read_text())
     if (registration.get("plan") != archive_plan() or registration.get("license") != LICENSE
+            or registration.get("quality_policy") != QUALITY_POLICY or manifest.get("quality_policy") != QUALITY_POLICY
             or registration.get("retry") is not False or registration.get("approved_for_live") is not False
             or registration.get("scope") != "NON-PRODUCTION GLOBAL SPOT REFERENCE"
             or manifest.get("venue") != "binance-global-spot-reference" or manifest.get("license") != LICENSE

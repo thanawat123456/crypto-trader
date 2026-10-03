@@ -22,7 +22,7 @@ from scripts import global_ml_research as ml
 from scripts import github_global_research as job
 
 
-def archive(item, *, columns=None, member=None, duplicate=False, symlink=False):
+def archive(item, *, columns=None, member=None, duplicate=False, symlink=False, extra_rows=()):
     month = datetime.fromisoformat(item["month"])
     unit = 1000000 if month.year >= 2025 else 1000
     at = int(month.timestamp()) * unit
@@ -31,6 +31,7 @@ def archive(item, *, columns=None, member=None, duplicate=False, symlink=False):
     text = ",".join(str(x) for x in columns) + "\n"
     if duplicate:
         text *= 2
+    text += "".join(",".join(str(x) for x in row) + "\n" for row in extra_rows)
     raw = io.BytesIO()
     with zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as zipped:
         info = zipfile.ZipInfo(member or item["name"].removesuffix(".zip") + ".csv")
@@ -164,6 +165,34 @@ class ArchiveTests(TempTest):
             data.decode_archive(broken, checksum, item)
         with patch.object(data, "MAX_OBJECT", 10), self.assertRaises(ValueError):
             data.decode_archive(*archive(item), item)
+
+    def test_shortened_close_is_reported_excluded_and_becomes_a_gap(self):
+        item = data.archive_plan()[0]
+        opening = int(data.START.timestamp()) * 1000
+        full = [opening, "100", "102", "99", "101", "10", opening + data.SECONDS * 1000 - 1, "1010", "5", "4", "404", "0"]
+        shortened = full.copy()
+        shortened[0] += data.SECONDS * 1000
+        shortened[6] += data.SECONDS * 1000 - 3585161  # Observed Jan-2018 provider anomaly; no price repair.
+        last = full.copy()
+        last[0] += 2 * data.SECONDS * 1000
+        last[6] += 2 * data.SECONDS * 1000
+        bars, stats = data.decode_archive(*archive(item, columns=full, extra_rows=(shortened, last)), item)
+        self.assertEqual(stats["rows"], 3)
+        self.assertEqual(stats["accepted_full_bars"], 2)
+        self.assertEqual(stats["excluded_partial_closes"][0]["provider_close"], shortened[6])
+        self.assertEqual(len(stats["excluded_partial_closes"]), 1)
+        grouped = {s: [replace(b, symbol=s) for b in bars] for s in data.SYMBOLS}
+        quality, _ = data.coverage(grouped)
+        self.assertEqual(quality["common_runs"], 2)
+        self.assertEqual(quality["quality"][data.SYMBOLS[0]]["gaps"][0]["missing_bars"], 1)
+
+    def test_close_before_open_and_duplicate_excluded_row_still_refused(self):
+        item = data.archive_plan()[0]
+        opening = int(data.START.timestamp()) * 1000
+        for closing in (opening - 1, opening + 1):
+            row = [opening, "100", "102", "99", "101", "10", closing, "1010", "5", "4", "404", "0"]
+            with self.subTest(closing=closing), self.assertRaises(ValueError):
+                data.decode_archive(*archive(item, columns=row, duplicate=True), item)
 
     def test_public_get_only_and_url_allowlist(self):
         transport = client()

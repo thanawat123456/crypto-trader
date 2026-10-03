@@ -17,7 +17,7 @@ REPOSITORY = "thanawat123456/crypto-trader"
 REF = "refs/heads/codex/v2-global-ml-20261003"
 DEADLINE = datetime(2026, 10, 10, tzinfo=timezone.utc)
 EXPECTED_CORE = "fb02d4e3de3caa0cded139c25f16bceaaccade804f82c0473ff1b5605403723b"
-EXPECTED_SPEC = "db04e9d2390bc8ef7b473c58b1585d755f20ac58ff263226f96a68981bd9dadb"
+EXPECTED_SPEC = "f6cfd446ebaad33ab1530150f66661689504ceb802e69ea04e8324055e23fc7f"
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 SCRIPTS = ("global_reference_data.py", "global_ml_research.py", "github_global_research.py")
 PURPOSE = "NON-COMMERCIAL GLOBAL REFERENCE FORECAST RESEARCH; NOT profit validation or deployment"
@@ -41,6 +41,7 @@ def specification():
     return {"archive_plan": data.archive_plan(), "start": data.START.isoformat(),
             "end_exclusive": data.END.isoformat(), "seconds": data.SECONDS,
             "symbols": data.SYMBOLS, "license": data.LICENSE, "schema": ml.SCHEMA,
+            "quality_policy": data.QUALITY_POLICY,
             "features": ml.FEATURES, "interactions": ml.INTERACTIONS, "variants": ml.VARIANTS,
             "protocol": ml.PROTOCOL, "labels": ml.SPEC, "parameters": ml.PARAMETERS,
             "requirements": ml.REQUIREMENTS, "shortlist": ml.SHORTLIST,
