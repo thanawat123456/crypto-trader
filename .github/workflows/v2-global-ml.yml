@@ -1,0 +1,67 @@
+name: V2 global forecast research (NO trading)
+
+# Fixed research branch only. No schedule, main/PR trigger, deployment or retry.
+on:
+  push:
+    branches: ['codex/v2-global-ml-20261003']
+    paths:
+      - 'scripts/global_reference_data.py'
+      - 'scripts/global_ml_research.py'
+      - 'scripts/github_global_research.py'
+      - 'tests/test_global_research.py'
+      - 'docs/TRADING_SYSTEM_V2_GLOBAL_RESEARCH_2026-10-03.md'
+      - '.github/workflows/v2-global-ml.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-global-ml-20261003
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONNOUSERSITE: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  OMP_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+
+jobs:
+  correctness:
+    if: github.repository == 'thanawat123456/crypto-trader' && github.ref == 'refs/heads/codex/v2-global-ml-20261003' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'PyYAML>=6.0,<7' 'numpy>=1.24,<3'
+      - name: All offline correctness tests (synthetic fixtures are NOT market evidence)
+        run: python -B -m unittest discover -s tests -p 'test_*.py' -v
+
+  global-research:
+    needs: correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'PyYAML>=6.0,<7' 'numpy>=1.24,<3'
+      - name: Fixed public archive capture, raw audit, model benchmark and read-only audit
+        run: python -B -m scripts.github_global_research --output "${RUNNER_TEMP}/v2-global-research"
+      - name: Retain only NEW public research data/models with the provider license notice
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v2-global-research-${{ github.run_id }}
+          path: ${{ runner.temp }}/v2-global-research/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 9
