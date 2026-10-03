@@ -1,0 +1,46 @@
+# V2 only: no API keys, no private endpoints, no live execution.
+venue: kraken
+quote_currency: USD
+initial_cash: '300'
+timeframe_minutes: 240
+quote_max_age_seconds: 30
+candle_grace_seconds: 120
+
+strategy:
+  trend_period: 200
+  slope_bars: 10
+  breakout_bars: 20
+  exit_bars: 10
+  atr_period: 14
+  atr_multiple: '2'
+
+risk:
+  per_trade: '0.0025'
+  aggregate: '0.0075'
+  asset_cap: '0.25'
+  gross_cap: '0.50'
+  max_positions: 2
+  daily_loss: '0.01'
+  pause_drawdown: '0.04'
+  emergency_drawdown: '0.08'
+  gap_buffer: '0.005'
+
+costs:
+  taker_fee: '0.008'
+  slippage: '0.0005'
+  simulated_spread: '0.001'
+  max_spread: '0.003'
+  source: 'Kraken published Tier 1 assumption checked 2026-09-30; verify account rate'
+  valid_until: '2026-10-07'
+
+# Historical assumptions only. Public-data paper reads actual minimums/steps
+# from Kraken AssetPairs before sizing, overriding these instrument limits.
+instruments:
+  - symbol: BTC/USD
+    quantity_step: '0.00000001'
+    min_quantity: '0.0001'
+    min_notional: '5'
+  - symbol: ETH/USD
+    quantity_step: '0.00000001'
+    min_quantity: '0.001'
+    min_notional: '5'

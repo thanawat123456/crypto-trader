@@ -1,0 +1,29 @@
+# PUBLIC research/paper only. No API keys. Never loads config.yaml / V1.
+venue: binance_th
+quote_currency: USDT
+initial_cash: 300
+timeframe_minutes: 240
+quote_max_age_seconds: 30
+candle_grace_seconds: 120
+
+costs:
+  taker_fee: 0.001
+  slippage: 0.0005
+  simulated_spread: 0.001
+  max_spread: 0.003
+  source: "Binance TH published regular crypto-pair 0.10% VAT inclusive, received-asset fee; https://www.binance.th/en/faq/spot-trading/91605c2481714f41becb6951906d6927 ; checked 2026-10-03; actual account rate/precision unverified"
+  valid_until: "2026-10-10"
+
+# Reference bounds only; public paper fetches fresh exchangeInfo every cycle.
+# These are not verified forever and must not replace native venue metadata.
+instruments:
+  - symbol: BTC/USDT
+    quantity_step: 0.00001
+    min_quantity: 0.00001
+    min_notional: 5
+    max_quantity: 9000
+  - symbol: ETH/USDT
+    quantity_step: 0.0001
+    min_quantity: 0.0001
+    min_notional: 5
+    max_quantity: 9000

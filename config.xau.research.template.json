@@ -1,0 +1,21 @@
+{
+  "broker": "REQUIRED: actual broker, not selected from a screenshot",
+  "account_type": "REQUIRED: account type and jurisdiction",
+  "terms_source": "REQUIRED: broker contract specification URL/export",
+  "checked_at": "REQUIRED: ISO timestamp with UTC offset",
+  "valid_until": "REQUIRED: ISO timestamp with UTC offset",
+  "session_calendar_source": "REQUIRED: market hours, holidays and DST",
+  "rollover_calendar_source": "REQUIRED: rollover time, triple-charge day and holidays",
+  "broker_timezone": "REQUIRED: IANA timezone",
+  "ounces_per_lot": null,
+  "lot_step": null,
+  "minimum_lots": null,
+  "margin_rate": null,
+  "commission_usd_per_lot_per_side": null,
+  "adverse_slippage_usd_per_ounce_per_side": null,
+  "maximum_spread_usd_per_ounce": null,
+  "swap_long_usd_per_lot_per_rollover_unit": null,
+  "swap_short_usd_per_lot_per_rollover_unit": null,
+  "symbol": "XAU/USD",
+  "account_currency": "USD"
+}
