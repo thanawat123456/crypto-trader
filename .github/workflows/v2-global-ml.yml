@@ -9,6 +9,7 @@ on:
       - 'scripts/global_ml_research.py'
       - 'scripts/github_global_research.py'
       - 'tests/test_global_research.py'
+      - 'tests/test_shadow.py'
       - 'docs/TRADING_SYSTEM_V2_GLOBAL_RESEARCH_2026-10-03.md'
       - '.github/workflows/v2-global-ml.yml'
 

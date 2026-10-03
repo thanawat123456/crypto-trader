@@ -34,6 +34,26 @@ def config():
                    costs=replace(cfg.costs, slippage=ZERO, simulated_spread=ZERO))
 
 
+def readonly_file_snapshot(output):
+    """Bind every byte except documented SQLite reader-coordination marks.
+
+    SQLite WAL readers can update shm bytes 100..119 even with mode=ro:
+    https://www.sqlite.org/walformat.html#wal_locks
+    Keep DB/WAL/raw bytes, file set and ALL other shm/header/index bytes bound.
+    Only the two root ledger sidecars qualify, not arbitrary *-shm filenames.
+    """
+    result = {}
+    for path in output.rglob("*"):
+        if path.is_file():
+            raw = path.read_bytes()
+            if path.parent == output and path.name in {"cash.sqlite-shm", "baseline.sqlite-shm"}:
+                if len(raw) < 136:
+                    raise ValueError("Truncated SQLite shared-memory header")
+                raw = raw[:100] + bytes(20) + raw[120:]
+            result[path.relative_to(output).as_posix()] = hashlib.sha256(raw).hexdigest()
+    return result
+
+
 def row(symbol="BTCUSDT", *, percent=True):
     result = {"symbol": symbol, "status": "TRADING", "type": "GLOBAL", "baseAsset": symbol[:-4],
               "quoteAsset": "USDT", "orderTypes": ["LIMIT", "MARKET"], "baseCommissionPrecision": 8,
@@ -275,15 +295,43 @@ class ShadowTests(unittest.TestCase):
 
     def test_readonly_audit_raw_tampering_and_default_paper_resume_guard(self):
         observe_shadow(self.output,self.cfg,feed=self.feed)
-        before = {p:p.read_bytes() for p in self.output.rglob("*") if p.is_file()}
+        content_before = {case: verify_dust_ledger(self.output/(case+".sqlite"), self.cfg)["content_sha256"] for case in ("cash", "baseline")}
+        before = readonly_file_snapshot(self.output)
         self.assertEqual(verify_shadow(self.output,self.cfg)["status"],"verified")
-        self.assertEqual(before,{p:p.read_bytes() for p in self.output.rglob("*") if p.is_file()})
+        self.assertEqual(before, readonly_file_snapshot(self.output))
+        self.assertEqual(content_before, {case: verify_dust_ledger(self.output/(case+".sqlite"), self.cfg)["content_sha256"] for case in ("cash", "baseline")})
         with self.assertRaisesRegex(ValueError,"execution profile mismatch"):
             Store(self.output/"baseline.sqlite",self.cfg,Mode.PAPER)
         path = self.output/"attempts/0000/receipts/0000.json"
         path.write_bytes(path.read_bytes()+b" ")
         with self.assertRaisesRegex(ValueError,"raw checksum"):
             verify_shadow(self.output,self.cfg)
+
+    def test_readonly_snapshot_only_masks_documented_reader_marks(self):
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            path = root/"baseline.sqlite-shm"
+            initial = bytes(32768)
+            path.write_bytes(initial)
+            before = readonly_file_snapshot(root)
+            for index in (100, 107, 119):
+                changed = bytearray(initial)
+                changed[index] = 1
+                path.write_bytes(changed)
+                self.assertEqual(before, readonly_file_snapshot(root))
+            for index in (0, 16, 64, 96, 120, 136, 32767):
+                changed = bytearray(initial)
+                changed[index] = 1
+                path.write_bytes(changed)
+                self.assertNotEqual(before, readonly_file_snapshot(root))
+            path.write_bytes(initial)
+            raw = root/"receipts"
+            raw.mkdir()
+            receipt = raw/"baseline.sqlite-shm"
+            receipt.write_bytes(initial)
+            before = readonly_file_snapshot(root)
+            receipt.write_bytes(initial[:100] + b"x" + initial[101:])
+            self.assertNotEqual(before, readonly_file_snapshot(root))
 
     def test_budget_and_protocol_cannot_be_rehashed_to_extend_trial(self):
         path = self.output/"registration.json"

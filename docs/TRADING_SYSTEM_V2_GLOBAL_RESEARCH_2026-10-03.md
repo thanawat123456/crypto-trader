@@ -44,3 +44,7 @@ Read-only downloaded-artifact audit:
 ```
 
 Run URLs, actual checksums/counts, audit outcomes and benchmark findings must be added to the local work log **only after they exist**, not inferred from successful synthetic tests.
+
+### Linux correctness portability correction
+
+The initial published run `37141040733` stopped at offline tests (344 tests, one legacy shadow snapshot assertion failed); the data/training job was skipped, so no research data was downloaded or scored. The legacy test compared SQLite reader coordination bytes as though they were ledger writes. The revised test masks only the documented 20-byte read-mark region at offsets 100..119 in the two exact ledger `-shm` files, per [SQLite WAL format](https://www.sqlite.org/walformat.html). It still binds every database/WAL/raw byte, file set, all other shared-memory header/index bytes and independently replayed ledger content hashes; an added regression tests both permitted reader marks and forbidden changes. No runtime/core code, thresholds, model parameters or market results changed. The failed run is retained; the source correction produces a distinct commit/run, not an automatic rerun or new independent financial evidence.
